@@ -3,7 +3,7 @@ truncated
 # general rule tailcorrections
 no
 # number of defined interactions
-112
+111
 # type interaction
 Ac_              lennard-jones         16.60    3.10
 Ag_              lennard-jones         18.11    2.80
@@ -54,7 +54,6 @@ Kr_              lennard-jones         166.40   3.636
 La_              lennard-jones         8.55     3.14
 Li_              lennard-jones         12.58    2.18
 Lu_              lennard-jones         20.63    3.24
-Lr_              lennard-jones         5.53     2.88
 Md_              lennard-jones         5.53     2.92
 Mg_              lennard-jones         55.85    2.69
 Mn_              lennard-jones         6.54     2.64

@@ -31,7 +31,7 @@ def setup_input_simulation(
                 shutil.copytree(item, outdir, dirs_exist_ok=True)
             else:
                 shutil.copy2(item, outdir)
-
+        shutil.copy(cif, outdir)
         # Editing input file.
         atoms = ase_read(cif)
         [uc_x, uc_y, uc_z] = calculate_cell_size(atoms)
@@ -64,3 +64,54 @@ def setup_input_simulation(
         )
 
     return True
+
+
+def get_output_data(output_path, calc_time=False, unit="mol/kg"):
+    result = {"success": False, "uptake": 0, "error": 0, "unit": unit}
+    with open(output_path, "r") as file:
+        for line in file:
+            if "Average loading absolute [mol/kg framework]" in line:
+                mol_kg_line = line.strip()
+            elif "Average loading absolute [milligram/gram framework]" in line:
+                mg_g_line = line.strip()
+            elif "Framework Density" in line:
+                density_line = line.strip()
+
+    if not all([mol_kg_line, mg_g_line, density_line]):
+        raise ValueError("One or more expected lines were not found.")
+
+    uptake_mol_kg = float(mol_kg_line.split()[5])
+    error_mol_kg = float(mol_kg_line.split()[7])
+
+    density_kg_m3 = float(density_line.split()[2])
+    uptake_mg_g = float(mg_g_line.split()[5])
+    error_mg_g = float(mg_g_line.split()[7])
+
+    if unit == "mol/kg":
+        result["uptake"] = uptake_mol_kg
+        result["error"] = error_mol_kg
+    elif unit == "g/L":
+        # Unit conversion to g/L
+        uptake_g_L = uptake_mg_g * density_kg_m3 / 1000
+        error_g_L = error_mg_g * density_kg_m3 / 1000
+        result["uptake"] = uptake_g_L
+        result["error"] = error_g_L
+    else:
+        raise ValueError("Unit {unit} is not supported yet.")
+
+    if calc_time:
+        from datetime import datetime
+
+        with open(output_path, "r") as f:
+            lines = [line.strip() for line in f if line.strip()]
+
+        start_raw = lines[6]
+        end_raw = lines[-3]
+
+        # Parse the raw datetime strings
+        start_time = datetime.strptime(start_raw, "%a %b %d %H:%M:%S %Y")
+        end_time = datetime.strptime(end_raw, "%a %b %d %H:%M:%S %Y")
+
+        duration_seconds = int((end_time - start_time).total_seconds())
+        result["calc_time_in_s"] = duration_seconds
+    return result

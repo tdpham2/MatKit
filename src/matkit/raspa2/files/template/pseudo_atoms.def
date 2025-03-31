@@ -1,5 +1,5 @@
 #number of pseudo atoms
-121
+120
 #type     print   as     chem   oxidation     mass          charge     polarization     B-factor     radii     connectivity     anisotropic anisotropic-type tinker-type
 Ac_       yes     Ac     Ac     0     	      227     	    0          0     1     1     0     0     relative     0
 Ag_       yes     Ag     Ag     0     	      107.868       0          0     1     1     0     0     relative     0
@@ -53,7 +53,6 @@ K_     	  yes     K      K      0     	      39.098        0          0     1   
 Kr_       yes     Kr     Kr     0     	      83.8          0          0     1     1     0     0     relative     0
 La_       yes     La     La     0     	      138.906       0          0     1     1     0     0     relative     0
 Li_       yes     Li     Li     0     	      6.941         0          0     1     1     0     0     relative     0
-Lw_       yes     Lr     Lr     0     	      262           0          0     1     1     0     0     relative     0
 Lu_       yes     Lu     Lu     0     	      174.967       0 	       0     1     1     0     0     relative     0
 Md_       yes     Md     Md     0     	      258           0          0     1     1     0     0     relative     0
 Mg_       yes     Mg     Mg     0     	      24.305        0          0     1     1     0     0     relative     0
