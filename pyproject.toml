@@ -26,4 +26,5 @@ include-package-data = true
 
 [tool.setuptools.package-data]
 "matkit.raspa2.files.template" = ["*"]
-
+"matkit.graspa_sycl.files.template" = ["*"]
+"matkit.graspa.files.template" = ["*"]
