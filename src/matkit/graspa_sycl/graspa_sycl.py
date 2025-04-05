@@ -90,7 +90,7 @@ def get_output_data(
             if len(cif_list) != 1:
                 raise ValueError(f"There are {len(cif_list)} in {output_path}.")
             else:
-                cifpath = os.path.join(output_path, cif_list[0])
+                cifpath = os.path.join(cif_list[0])
         else:
             cifpath = os.path.join(output_path, cifname)
 
