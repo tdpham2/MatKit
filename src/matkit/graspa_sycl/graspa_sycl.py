@@ -3,6 +3,7 @@ import shutil
 import os
 from matkit.utils.unitcell_calculator import calculate_cell_size
 from ase.io import read as ase_read
+import glob
 
 _file_dir = Path(__file__).parent / "files" / "template"
 
@@ -66,52 +67,49 @@ def setup_input_simulation(
     return True
 
 
-def get_output_data(output_path, calc_time=False, unit="mol/kg"):
+def get_output_data(
+    output_path: str,
+    calc_time: bool = False,
+    unit: str = "mol/kg",
+    output_fname: str = "raspa.log",
+    cifname: str = None,
+):
     result = {"success": False, "uptake": 0, "error": 0, "unit": unit}
-    with open(output_path, "r") as file:
-        for line in file:
-            if "Average loading absolute [mol/kg framework]" in line:
-                mol_kg_line = line.strip()
-            elif "Average loading absolute [milligram/gram framework]" in line:
-                mg_g_line = line.strip()
-            elif "Framework Density" in line:
-                density_line = line.strip()
+    try:
+        with open(os.path.join(output_path, output_fname), "r") as file:
+            for line in file:
+                if "UnitCells" in line:
+                    unitcell_line = line.strip()
+                elif "Overall: Average:" in line:
+                    uptake_line = line.strip()
+                elif "Work" in line:
+                    time_line = line.strip()
 
-    if not all([mol_kg_line, mg_g_line, density_line]):
-        raise ValueError("One or more expected lines were not found.")
+        if cifname is None:
+            cif_list = glob.glob(os.path.join(output_path, "*.cif"))
+            if len(cif_list) != 1:
+                raise ValueError(f"There are {len(cif_list)} in {output_path}.")
+            else:
+                cifpath = os.path.join(output_path, cif_list[0])
+        else:
+            cifpath = os.path.join(output_path, cifname)
 
-    uptake_mol_kg = float(mol_kg_line.split()[5])
-    error_mol_kg = float(mol_kg_line.split()[7])
+        atoms = ase_read(cifpath)
+        masses = sum(atoms.get_masses())
 
-    density_kg_m3 = float(density_line.split()[2])
-    uptake_mg_g = float(mg_g_line.split()[5])
-    error_mg_g = float(mg_g_line.split()[7])
-
-    if unit == "mol/kg":
+        uptake_total_molecule = float(uptake_line.split()[2][:-1])
+        error_total_molecule = float(uptake_line.split()[4][:-1])
+        unitcell = unitcell_line.split()[4:]
+        unitcell = [int(float(i)) for i in unitcell]
+        total_masses = masses * unitcell[0] * unitcell[1] * unitcell[2]
+        uptake_mol_kg = uptake_total_molecule / total_masses * 1000
+        error_mol_kg = error_total_molecule / total_masses * 1000
         result["uptake"] = uptake_mol_kg
         result["error"] = error_mol_kg
-    elif unit == "g/L":
-        # Unit conversion to g/L
-        uptake_g_L = uptake_mg_g * density_kg_m3 / 1000
-        error_g_L = error_mg_g * density_kg_m3 / 1000
-        result["uptake"] = uptake_g_L
-        result["error"] = error_g_L
-    else:
-        raise ValueError("Unit {unit} is not supported yet.")
+        result["calc_time_in_s"] = float(time_line.split()[2])
+        result["success"] = True
 
-    if calc_time:
-        from datetime import datetime
-
-        with open(output_path, "r") as f:
-            lines = [line.strip() for line in f if line.strip()]
-
-        start_raw = lines[6]
-        end_raw = lines[-3]
-
-        # Parse the raw datetime strings
-        start_time = datetime.strptime(start_raw, "%a %b %d %H:%M:%S %Y")
-        end_time = datetime.strptime(end_raw, "%a %b %d %H:%M:%S %Y")
-
-        duration_seconds = int((end_time - start_time).total_seconds())
-        result["calc_time_in_s"] = duration_seconds
-    return result
+        return result
+    except Exception as e:
+        raise ValueError(e)
+        return result
