@@ -51,18 +51,14 @@ def setup_input_simulation(
                 if "PRESSURE" in line:
                     line = line.replace("PRESSURE", str(pressure))
                 if "UC_X UC_Y UC_Z" in line:
-                    line = line.replace(
-                        "UC_X UC_Y UC_Z", f"{uc_x} {uc_y} {uc_z}"
-                    )
+                    line = line.replace("UC_X UC_Y UC_Z", f"{uc_x} {uc_y} {uc_z}")
                 if "CUTOFF" in line:
                     line = line.replace("CUTOFF", str(cutoff))
                 if "CIFFILE" in line:
                     line = line.replace("CIFFILE", cifname)
                 f_out.write(line)
 
-        shutil.move(
-            f"{outdir}/simulation.input.tmp", f"{outdir}/simulation.input"
-        )
+        shutil.move(f"{outdir}/simulation.input.tmp", f"{outdir}/simulation.input")
 
     return True
 
@@ -103,12 +99,7 @@ def get_output_data(
         atoms = ase_read(cifpath)
 
         if unit == "mol/kg":
-            framework_mass = (
-                sum(atoms.get_masses())
-                * unitcell[0]
-                * unitcell[1]
-                * unitcell[2]
-            )
+            framework_mass = sum(atoms.get_masses()) * unitcell[0] * unitcell[1] * unitcell[2]
 
             uptake_mol_kg = uptake_total_molecule / framework_mass * 1000
             error_mol_kg = error_total_molecule / framework_mass * 1000
@@ -116,9 +107,7 @@ def get_output_data(
             result["error"] = error_mol_kg
             result["success"] = True
         elif unit == "g/L":
-            framework_vol = (
-                atoms.get_volume * unitcell[0] * unitcell[1] * unitcell[2]
-            )
+            framework_vol = atoms.get_volume() * unitcell[0] * unitcell[1] * unitcell[2]
             framework_vol_in_L = framework_vol * 1e-27
             if adsorbate == "CO2":
                 molar_mass = 44.0098
@@ -126,18 +115,8 @@ def get_output_data(
                 molar_mass = 2.02
             else:
                 raise ValueError(f"Adsorbate {adsorbate} is not supported.")
-            uptake_g_L = (
-                uptake_total_molecule
-                / (6.022 * 1e23)
-                * molar_mass
-                / framework_vol_in_L
-            )
-            error_g_L = (
-                error_total_molecule
-                / (6.022 * 1e23)
-                * molar_mass
-                / framework_vol_in_L
-            )
+            uptake_g_L = uptake_total_molecule / (6.022 * 1e23) * molar_mass / framework_vol_in_L
+            error_g_L = error_total_molecule / (6.022 * 1e23) * molar_mass / framework_vol_in_L
             result["uptake"] = uptake_g_L
             result["error"] = error_g_L
 
