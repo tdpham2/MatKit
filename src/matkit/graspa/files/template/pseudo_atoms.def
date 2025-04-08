@@ -1,5 +1,5 @@
 #number of pseudo atoms
-109
+110
 #type     print   as     chem   oxi     mass          charge     polarization     B-factor     radii     connectivity     anisotropic anisotropic-type tinker-type
 Ac       yes     Ac     Ac     0     	      227     	    0          0     1     1     0     0     relative     0
 Ag       yes     Ag     Ag     0     	      107.868       0          0     1     1     0     0     relative     0
@@ -110,3 +110,4 @@ N_com	  no	  N      -      0      	      0.0           0.964 	   0     1     1  
 Ow        yes     O    	 O      0     	      15.9994       0.0        0     1.0   0.5   2     0     relative     0
 Hw        yes     H    	 H      0      	      1.008         0.52       0     1.0   0.32  1     0     relative     0
 Lw        no      Lw     -      0      	      0.0          -1.04       0     1.0   1.00  1     0     relative     0
+CH4_sp3   yes     C     C       0             16.04246      0.0        0     1.0   1.00  0     0     relative     0
