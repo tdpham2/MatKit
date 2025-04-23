@@ -1,11 +1,10 @@
 NumberOfInitializationCycles NCYCLE
 NumberOfEquilibrationCycles  0
 NumberOfProductionCycles     NCYCLE
-UseMaxStep yes
+UseMaxStep no
 MaxStepPerCycle 1
 
 RestartFile no
-RandomSeed 2025
 BMCBiasingMethod LJ_Biasing
 NumberOfTrialPositions 10
 NumberOfTrialOrientations 10
