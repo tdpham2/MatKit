@@ -63,9 +63,7 @@ def setup_input_simulation(
 
 
 def get_output_data(
-    output_path: str,
-    unit="mol/kg",
-    output_fname: str = "raspa.log",
+    output_path: str, unit="mol/kg", output_fname: str = "raspa.log", eos: bool = False
 ):
     result = {"success": False, "uptake": 0, "error": 0, "unit": unit}
     uptake_lines = []
@@ -77,17 +75,31 @@ def get_output_data(
                 if "Work" in line:
                     time_line = line.strip()
 
-        result_mol_kg = uptake_lines[6].split(",")
-        uptake_mol_kg = result_mol_kg[0].split()[-1]
-        error_mol_kg = result_mol_kg[1].split()[-1]
+        if not eos:
+            result_mol_kg = uptake_lines[6].split(",")
+            uptake_mol_kg = result_mol_kg[0].split()[-1]
+            error_mol_kg = result_mol_kg[1].split()[-1]
 
-        result_mg_g = uptake_lines[4].split(",")
-        uptake_mg_g = result_mg_g[0].split()[-1]
-        error_mg_g = result_mg_g[1].split()[-1]
+            result_mg_g = uptake_lines[4].split(",")
+            uptake_mg_g = result_mg_g[0].split()[-1]
+            error_mg_g = result_mg_g[1].split()[-1]
 
-        result_g_L = uptake_lines[7].split(",")
-        uptake_g_L = result_g_L[0].split()[-1]
-        error_g_L = result_g_L[1].split()[-1]
+            result_g_L = uptake_lines[7].split(",")
+            uptake_g_L = result_g_L[0].split()[-1]
+            error_g_L = result_g_L[1].split()[-1]
+
+        else:
+            result_mol_kg = uptake_lines[11].split(",")
+            uptake_mol_kg = result_mol_kg[0].split()[-1]
+            error_mol_kg = result_mol_kg[1].split()[-1]
+
+            result_mg_g = uptake_lines[5].split(",")
+            uptake_mg_g = result_mg_g[0].split()[-1]
+            error_mg_g = result_mg_g[1].split()[-1]
+
+            result_g_L = uptake_lines[13].split(",")
+            uptake_g_L = result_g_L[0].split()[-1]
+            error_g_L = result_g_L[1].split()[-1]
 
         if unit == "mol/kg":
             result["uptake"] = uptake_mol_kg
