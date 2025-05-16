@@ -1,0 +1,57 @@
+NumberOfInitializationCycles NCYCLE
+NumberOfEquilibrationCycles  0
+NumberOfProductionCycles     NCYCLE
+
+RestartFile no
+BMCBiasingMethod LJ_Biasing
+NumberOfTrialPositions 10
+NumberOfTrialOrientations 10
+NumberOfBlocks 1
+AdsorbateAllocateSpace 30240
+
+NumberOfSimulations 1
+SingleSimulation yes
+DifferentFrameworks yes
+
+InputFileType cif
+FrameworkName CIFFILE
+UnitCells 0 UC_X UC_Y UC_Z
+ChargeMethod Ewald
+Temperature TEMPERATURE
+Pressure PRESSURE
+OverlapCriteria 1e5
+CutOffVDW CUTOFF
+CutOffCoulomb CUTOFF
+EwaldPrecision 1e-6
+UseChargesFromCIFFile         yes
+
+Component 0 MoleculeName              CO2
+             IdealGasRosenbluthWeight  1.0
+             FugacityCoefficient       PR-EOS
+             MolFraction               0.14
+             TranslationProbability    1.0
+             RotationProbability       1.0
+             ReinsertionProbability    1.0
+             IdentityChangeProbability 1.0
+             SwapProbability           2.0
+             CreateNumberOfMolecules   0
+Component 1 MoleculeName               N2
+             IdealGasRosenbluthWeight  1.0
+             FugacityCoefficient       PR-EOS
+             MolFraction               0.8553
+             TranslationProbability    1.0
+             RotationProbability       1.0
+             ReinsertionProbability    1.0
+             IdentityChangeProbability 1.0
+             SwapProbability           2.0
+             CreateNumberOfMolecules   0
+Component 2 MoleculeName               TIP4P
+             IdealGasRosenbluthWeight  1.0
+             FugacityCoefficient       PR-EOS
+             MolFraction               0.0047
+             TranslationProbability    1.0
+             RotationProbability       1.0
+             ReinsertionProbability    1.0
+             IdentityChangeProbability 1.0
+             SwapProbability           2.0
+             CreateNumberOfMolecules   0

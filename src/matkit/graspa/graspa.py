@@ -4,60 +4,61 @@ import os
 from matkit.utils.unitcell_calculator import calculate_cell_size
 from ase.io import read as ase_read
 
-_file_dir = Path(__file__).parent / "files" / "template"
-
 
 def setup_input_simulation(
-    cifs: list[str],
+    cif: str,
     outpath: str,
     adsorbate: str = "CO2",
     temperature: float = 298,
     pressure: float = 1e5,
     cutoff: float = 12.8,
     n_cycle: int = 1000,
+    template_dir: str = "template",
 ):
     outpath = Path(outpath)
+    _file_dir = Path(__file__).parent / "files" / template_dir
 
-    for cif in cifs:
-        cifpath = Path(cif)
-        if not cifpath.exists():
-            raise FileNotFoundError(f"Source directory does not exist: {cif}")
+    cifpath = Path(cif)
+    if not cifpath.exists():
+        raise FileNotFoundError(f"Source directory does not exist: {cif}")
 
-        cifname = cif.split("/")[-1][:-4]
-        outdir = Path(outpath)
-        outdir.mkdir(parents=True, exist_ok=True)
-        for item in _file_dir.iterdir():
-            if item.is_dir():
-                shutil.copytree(item, outdir, dirs_exist_ok=True)
-            else:
-                shutil.copy2(item, outdir)
-        shutil.copy(cif, outdir)
-        # Editing input file.
-        atoms = ase_read(cif)
-        [uc_x, uc_y, uc_z] = calculate_cell_size(atoms)
+    cifname = cif.split("/")[-1][:-4]
+    outdir = Path(outpath)
+    outdir.mkdir(parents=True, exist_ok=True)
+    for item in _file_dir.iterdir():
+        if item.is_dir():
+            shutil.copytree(item, outdir, dirs_exist_ok=True)
+        else:
+            shutil.copy2(item, outdir)
+    shutil.copy(cif, outdir)
+    # Editing input file.
+    atoms = ase_read(cif)
+    [uc_x, uc_y, uc_z] = calculate_cell_size(atoms)
 
-        with (
-            open(f"{outdir}/simulation.input", "r") as f_in,
-            open(f"{outdir}/simulation.input.tmp", "w") as f_out,
-        ):
-            for line in f_in:
-                if "NCYCLE" in line:
-                    line = line.replace("NCYCLE", str(n_cycle))
+    with (
+        open(f"{outdir}/simulation.input", "r") as f_in,
+        open(f"{outdir}/simulation.input.tmp", "w") as f_out,
+    ):
+        for line in f_in:
+            if "NCYCLE" in line:
+                line = line.replace("NCYCLE", str(n_cycle))
+            if "TEMPERATURE" in line:
+                line = line.replace("TEMPERATURE", str(temperature))
+            if "PRESSURE" in line:
+                line = line.replace("PRESSURE", str(pressure))
+            if "UC_X UC_Y UC_Z" in line:
+                line = line.replace("UC_X UC_Y UC_Z", f"{uc_x} {uc_y} {uc_z}")
+            if "CUTOFF" in line:
+                line = line.replace("CUTOFF", str(cutoff))
+            if "CIFFILE" in line:
+                line = line.replace("CIFFILE", cifname)
+            if template_dir != "template_mixture":
                 if "ADSORBATE" in line:
                     line = line.replace("ADSORBATE", adsorbate)
-                if "TEMPERATURE" in line:
-                    line = line.replace("TEMPERATURE", str(temperature))
-                if "PRESSURE" in line:
-                    line = line.replace("PRESSURE", str(pressure))
-                if "UC_X UC_Y UC_Z" in line:
-                    line = line.replace("UC_X UC_Y UC_Z", f"{uc_x} {uc_y} {uc_z}")
-                if "CUTOFF" in line:
-                    line = line.replace("CUTOFF", str(cutoff))
-                if "CIFFILE" in line:
-                    line = line.replace("CIFFILE", cifname)
-                f_out.write(line)
 
-        shutil.move(f"{outdir}/simulation.input.tmp", f"{outdir}/simulation.input")
+            f_out.write(line)
+
+    shutil.move(f"{outdir}/simulation.input.tmp", f"{outdir}/simulation.input")
 
     return True
 
