@@ -28,8 +28,8 @@ CutOffCoulomb CUTOFF
 EwaldPrecision 1e-6
 
 Component 0 MoleculeName              ADSORBATE
-             IdealGasRosenbluthWeight  PR-EOS
-             FugacityCoefficient       1.0
+             IdealGasRosenbluthWeight  1.0
+             FugacityCoefficient       PR-EOS
              TranslationProbability    1.0
              RotationProbability       1.0
              ReinsertionProbability    1.0
