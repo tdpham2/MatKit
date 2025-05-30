@@ -1,8 +1,6 @@
 NumberOfInitializationCycles NCYCLE
 NumberOfEquilibrationCycles  0
 NumberOfProductionCycles     NCYCLE
-UseMaxStep no
-MaxStepPerCycle 1
 
 RestartFile no
 BMCBiasingMethod LJ_Biasing
@@ -15,7 +13,6 @@ NumberOfSimulations 1
 SingleSimulation yes
 DifferentFrameworks yes
 
-UseChargesFromCIFFile         yes
 InputFileType cif
 FrameworkName CIFFILE
 UnitCells 0 UC_X UC_Y UC_Z
@@ -26,12 +23,25 @@ OverlapCriteria 1e5
 CutOffVDW CUTOFF
 CutOffCoulomb CUTOFF
 EwaldPrecision 1e-6
+UseChargesFromCIFFile         yes
 
-Component 0 MoleculeName              ADSORBATE
-             IdealGasRosenbluthWeight  PR-EOS
-             FugacityCoefficient       1.0
+Component 0 MoleculeName              CO2
+             IdealGasRosenbluthWeight  1.0
+             FugacityCoefficient       PR-EOS
+             MolFraction               0.15
              TranslationProbability    1.0
              RotationProbability       1.0
              ReinsertionProbability    1.0
+             IdentityChangeProbability 1.0
+             SwapProbability           2.0
+             CreateNumberOfMolecules   0
+Component 1 MoleculeName               N2
+             IdealGasRosenbluthWeight  1.0
+             FugacityCoefficient       PR-EOS
+             MolFraction               0.85
+             TranslationProbability    1.0
+             RotationProbability       1.0
+             ReinsertionProbability    1.0
+             IdentityChangeProbability 1.0
              SwapProbability           2.0
              CreateNumberOfMolecules   0
