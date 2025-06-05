@@ -28,3 +28,4 @@ include-package-data = true
 "matkit.raspa2.files.template" = ["*"]
 "matkit.graspa_sycl.files.template" = ["*"]
 "matkit.graspa.files.template" = ["*"]
+"matkit.graspa.files.template_mixture_isotherm" = ['*']

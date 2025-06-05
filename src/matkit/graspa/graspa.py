@@ -122,3 +122,99 @@ def get_output_data(
         raise ValueError(f"{e}")
 
         return result
+
+
+DEFAULT_ADSORBATE_PARAMS = {
+    "translation": 1.0,
+    "rotation": 1.0,
+    "reinsertion": 1.0,
+    "swap": 2.0,
+    "CreateNumberOfMolecules": 0,
+    "IdealGasRosenbluthWeight": 1.0,
+    "FugacityCoefficient": "PR-EOS",
+    "MolFraction": 1.0,
+}
+
+
+def generate_component_blocks(adsorbates):
+    lines = []
+    for i, ad in enumerate(adsorbates):
+        if "name" not in ad:
+            raise ValueError("Each adsorbate must have a 'name' key")
+        params = {**DEFAULT_ADSORBATE_PARAMS, **ad}
+        lines.append(f"Component {i} MoleculeName              {params['name']}")
+        keys = [
+            ("IdealGasRosenbluthWeight", "IdealGasRosenbluthWeight"),
+            ("FugacityCoefficient", "FugacityCoefficient"),
+            ("MolFraction", "MolFraction"),
+            ("translation", "TranslationProbability"),
+            ("rotation", "RotationProbability"),
+            ("reinsertion", "ReinsertionProbability"),
+            ("swap", "SwapProbability"),
+            ("CreateNumberOfMolecules", "CreateNumberOfMolecules"),
+        ]
+        for param_key, input_key in keys:
+            lines.append(f"             {input_key:28} {params[param_key]}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def setup_simulation(
+    cif: str,
+    outpath: str,
+    adsorbates: list,  # List of adsorbate dicts with "name" key and optional overrides
+    temperature: float = 298.0,
+    pressure: float = 1e5,
+    cutoff: float = 12.8,
+    n_cycle: int = 1000,
+    template_dir: str = "template",
+):
+    outdir = Path(outpath)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    cifpath = Path(cif)
+    if not cifpath.exists():
+        raise FileNotFoundError(f"CIF file does not exist: {cif}")
+    cifname = cifpath.stem
+    shutil.copy(cifpath, outdir / f"{cifname}.cif")
+
+    # Copy template files
+    template_path = Path(__file__).parent / "files" / template_dir
+    for item in template_path.iterdir():
+        if item.is_dir():
+            shutil.copytree(item, outdir, dirs_exist_ok=True)
+        else:
+            shutil.copy2(item, outdir)
+
+    # Read CIF to get cell size
+    atoms = ase_read(cifpath)
+    uc_x, uc_y, uc_z = calculate_cell_size(atoms)
+
+    # Read template and replace placeholders
+    input_path = outdir / "simulation.input"
+    with input_path.open("r") as f:
+        template = f.read()
+
+    subs = {
+        "NCYCLE": str(n_cycle),
+        "TEMPERATURE": str(temperature),
+        "PRESSURE": str(pressure),
+        "CUTOFF": str(cutoff),
+        "CIFFILE": cifname,
+        "UC_X": str(uc_x),
+        "UC_Y": str(uc_y),
+        "UC_Z": str(uc_z),
+    }
+
+    for key, val in subs.items():
+        template = template.replace(key, val)
+
+    # Replace component block placeholder
+    component_block = generate_component_blocks(adsorbates)
+    template = template.replace("__COMPONENTS__", component_block)
+    print(template)
+    # Write final input
+    with input_path.open("w") as f:
+        f.write(template)
+
+    return True
