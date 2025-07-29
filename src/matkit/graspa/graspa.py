@@ -66,7 +66,15 @@ def setup_input_simulation(
 def get_output_data(
     output_path: str, unit="mol/kg", output_fname: str = "raspa.log", eos: bool = False
 ):
-    result = {"success": False, "uptake": 0, "error": 0, "unit": unit}
+    result = {
+        "success": False,
+        "uptake": None,
+        "error": None,
+        "unit": unit,
+        "qst": None,
+        "error_qst": None,
+        "qst_unit": "kJ/mol",
+    }
     uptake_lines = []
     try:
         with open(os.path.join(output_path, output_fname), "r") as rf:
@@ -75,6 +83,12 @@ def get_output_data(
                     uptake_lines.append(line.strip())
                 if "Work" in line:
                     time_line = line.strip()
+
+        result_qst = uptake_lines[0].split(",")
+        qst = result_qst[0].split()[-1]
+        error_qst = result_qst[1].split()[-1]
+        result["qst"] = qst
+        result["error_qst"] = error_qst
 
         if not eos:
             result_mol_kg = uptake_lines[6].split(",")
@@ -125,10 +139,10 @@ def get_output_data(
 
 
 DEFAULT_ADSORBATE_PARAMS = {
-    "translation": 1.0,
-    "rotation": 1.0,
-    "reinsertion": 1.0,
-    "swap": 2.0,
+    "TranslationProbability": 1.0,
+    "RotationProbability": 1.0,
+    "ReinsertionProbability": 1.0,
+    "SwapProbability": 2.0,
     "CreateNumberOfMolecules": 0,
     "IdealGasRosenbluthWeight": 1.0,
     "FugacityCoefficient": "PR-EOS",
@@ -139,23 +153,22 @@ DEFAULT_ADSORBATE_PARAMS = {
 def generate_component_blocks(adsorbates):
     lines = []
     for i, ad in enumerate(adsorbates):
-        if "name" not in ad:
-            raise ValueError("Each adsorbate must have a 'name' key")
-        params = {**DEFAULT_ADSORBATE_PARAMS, **ad}
-        lines.append(f"Component {i} MoleculeName              {params['name']}")
-        keys = [
-            ("IdealGasRosenbluthWeight", "IdealGasRosenbluthWeight"),
-            ("FugacityCoefficient", "FugacityCoefficient"),
-            ("MolFraction", "MolFraction"),
-            ("translation", "TranslationProbability"),
-            ("rotation", "RotationProbability"),
-            ("reinsertion", "ReinsertionProbability"),
-            ("swap", "SwapProbability"),
-            ("CreateNumberOfMolecules", "CreateNumberOfMolecules"),
-        ]
-        for param_key, input_key in keys:
-            lines.append(f"             {input_key:28} {params[param_key]}")
-        lines.append("")
+        if "MoleculeName" not in ad:
+            raise ValueError("Each adsorbate must have a 'MoleculeName' key")
+
+        # Start the block
+        lines.append(f"Component {i} MoleculeName              {ad['MoleculeName']}")
+
+        for key, default_val in DEFAULT_ADSORBATE_PARAMS.items():
+            # Skip this key if the user explicitly set it to None
+            if key in ad and ad[key] is None:
+                continue
+            # If user provided a value, use it; else use default
+            val = ad.get(key, default_val)
+            lines.append(f"             {key:28} {val}")
+
+        lines.append("")  # Spacer between components
+
     return "\n".join(lines)
 
 
@@ -212,7 +225,6 @@ def setup_simulation(
     # Replace component block placeholder
     component_block = generate_component_blocks(adsorbates)
     template = template.replace("__COMPONENTS__", component_block)
-    print(template)
     # Write final input
     with input_path.open("w") as f:
         f.write(template)
