@@ -1,7 +1,7 @@
 # Software Installed on Crux
 
-This document provides notes on software I have manually installed on **Crux**.  
-These steps are for personal reference and reproducibility — they are **not** intended as official or optimized installation instructions.
+This document provides notes on software I have installed on [**Crux**](https://docs.alcf.anl.gov/crux/).  
+These steps are for personal reference and reproducibility. They are **not** intended as official or optimized installation instructions.
 
 ---
 
@@ -69,11 +69,11 @@ cd $PBS_O_WORKDIR
 full/path/to/orca test.inp
 ```
 
-8. Scaling performance on 1 node:
+### Scaling performance on 1 node:
 
 <img src="../../assets/images/orca_scaling_crux.png" width="400">
 
-## Sample Input (test.inp) for Scaling Test:
+### Sample Input (test.inp) for Scaling Test:
 
 ```bash
 !PBE DEF2-SVP OPT
@@ -111,5 +111,4 @@ Ni    0.261813   -0.000018    0.000010
  H    0.256247    3.940754   -0.880617
 Cl    2.421242   -0.000037    0.000009
 *
-
 ```
