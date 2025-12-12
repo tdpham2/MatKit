@@ -3,7 +3,7 @@ truncated
 # general rule tailcorrections
 no
 # number of defined interactions
-106
+110
 # type interaction
 Ac    lennard-jones    16.60    3.10
 Ag    lennard-jones    18.11    2.80
@@ -111,5 +111,9 @@ C_co2    lennard-jones    27.0    2.80
 O_co2    lennard-jones    79.0    3.05
 H_h2     lennard-jones    0.0   0.0
 H_com    lennard-jones    36.7  2.958
+Ow    lennard-jones    78.0    3.154
+Hw    lennard-jones    0.0    0.0
+Lw    lennard-jones    0.0    0.0
+CH4_sp3  lennard-jones   148.0   3.73
 # general mixing rule for Lennard-Jones
 Lorentz-Berthelot
