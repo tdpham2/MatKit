@@ -17,15 +17,14 @@ def setup_simulation(
     cutoff: float = 12.8,
     n_cycle: int = 1000,
 ):
-    outpath = Path(outpath)
+    outdir = Path(outpath)
+    outdir.mkdir(parents=True, exist_ok=True)
 
     cifpath = Path(cif)
     if not cifpath.exists():
         raise FileNotFoundError(f"Source directory does not exist: {cif}")
 
     cifname = cif.split("/")[-1][:-4]
-    outdir = Path(os.path.join(outpath, cifname))
-    outdir.mkdir(parents=True, exist_ok=True)
     for item in _file_dir.iterdir():
         if item.is_dir():
             shutil.copytree(item, outdir, dirs_exist_ok=True)
