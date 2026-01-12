@@ -5,66 +5,11 @@ from matkit.utils.unitcell_calculator import calculate_cell_size
 from ase.io import read as ase_read
 
 
-def setup_input_simulation(
-    cif: str,
-    outpath: str,
-    adsorbate: str = "CO2",
-    temperature: float = 298,
-    pressure: float = 1e5,
-    cutoff: float = 12.8,
-    n_cycle: int = 1000,
-    template_dir: str = "template",
-):
-    outpath = Path(outpath)
-    _file_dir = Path(__file__).parent / "files" / template_dir
-
-    cifpath = Path(cif)
-    if not cifpath.exists():
-        raise FileNotFoundError(f"Source directory does not exist: {cif}")
-
-    cifname = cif.split("/")[-1][:-4]
-    outdir = Path(outpath)
-    outdir.mkdir(parents=True, exist_ok=True)
-    for item in _file_dir.iterdir():
-        if item.is_dir():
-            shutil.copytree(item, outdir, dirs_exist_ok=True)
-        else:
-            shutil.copy2(item, outdir)
-    shutil.copy(cif, outdir)
-    # Editing input file.
-    atoms = ase_read(cif)
-    [uc_x, uc_y, uc_z] = calculate_cell_size(atoms)
-
-    with (
-        open(f"{outdir}/simulation.input", "r") as f_in,
-        open(f"{outdir}/simulation.input.tmp", "w") as f_out,
-    ):
-        for line in f_in:
-            if "NCYCLE" in line:
-                line = line.replace("NCYCLE", str(n_cycle))
-            if "TEMPERATURE" in line:
-                line = line.replace("TEMPERATURE", str(temperature))
-            if "PRESSURE" in line:
-                line = line.replace("PRESSURE", str(pressure))
-            if "UC_X UC_Y UC_Z" in line:
-                line = line.replace("UC_X UC_Y UC_Z", f"{uc_x} {uc_y} {uc_z}")
-            if "CUTOFF" in line:
-                line = line.replace("CUTOFF", str(cutoff))
-            if "CIFFILE" in line:
-                line = line.replace("CIFFILE", cifname)
-            if template_dir != "template_mixture":
-                if "ADSORBATE" in line:
-                    line = line.replace("ADSORBATE", adsorbate)
-
-            f_out.write(line)
-
-    shutil.move(f"{outdir}/simulation.input.tmp", f"{outdir}/simulation.input")
-
-    return True
-
-
 def get_output_data(
-    output_path: str, unit="mol/kg", output_fname: str = "raspa.log", eos: bool = False
+    output_path: str,
+    unit="mol/kg",
+    output_fname: str = "raspa.log",
+    eos: bool = False,
 ):
     result = {
         "success": False,
@@ -157,7 +102,9 @@ def generate_component_blocks(adsorbates):
             raise ValueError("Each adsorbate must have a 'MoleculeName' key")
 
         # Start the block
-        lines.append(f"Component {i} MoleculeName              {ad['MoleculeName']}")
+        lines.append(
+            f"Component {i} MoleculeName              {ad['MoleculeName']}"
+        )
 
         for key, default_val in DEFAULT_ADSORBATE_PARAMS.items():
             # Skip this key if the user explicitly set it to None
@@ -175,7 +122,7 @@ def generate_component_blocks(adsorbates):
 def setup_simulation(
     cif: str,
     outpath: str,
-    adsorbates: list,  # List of adsorbate dicts with "name" key and optional overrides
+    adsorbates: list,
     temperature: float = 298.0,
     pressure: float = 1e5,
     cutoff: float = 12.8,
