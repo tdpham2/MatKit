@@ -1,9 +1,7 @@
 from pathlib import Path
 import shutil
-import os
 from matkit.utils.unitcell_calculator import calculate_cell_size
 from ase.io import read as ase_read
-import glob
 
 _file_dir = Path(__file__).parent / "files" / "template"
 
@@ -16,15 +14,32 @@ def setup_simulation(
     pressure: float = 1e5,
     cutoff: float = 12.8,
     n_cycle: int = 1000,
-):
+) -> bool:
+    """Set up a gRASPA SYCL (Intel GPU) GCMC simulation.
+
+    Args:
+        cif: Path to the input CIF structure file.
+        outpath: Directory to write simulation files to.
+        adsorbate: Adsorbate molecule name (e.g., 'CO2', 'H2').
+        temperature: Simulation temperature in Kelvin.
+        pressure: Simulation pressure in Pascals.
+        cutoff: Van der Waals cutoff radius in Angstrom.
+        n_cycle: Number of Monte Carlo cycles.
+
+    Returns:
+        True on success.
+
+    Raises:
+        FileNotFoundError: If the CIF file does not exist.
+    """
     outdir = Path(outpath)
     outdir.mkdir(parents=True, exist_ok=True)
 
     cifpath = Path(cif)
     if not cifpath.exists():
-        raise FileNotFoundError(f"Source directory does not exist: {cif}")
+        raise FileNotFoundError(f"CIF file does not exist: {cif}")
 
-    cifname = cif.split("/")[-1][:-4]
+    cifname = cifpath.stem
     for item in _file_dir.iterdir():
         if item.is_dir():
             shutil.copytree(item, outdir, dirs_exist_ok=True)
@@ -68,10 +83,27 @@ def get_output_data(
     output_fname: str = "raspa.log",
     cifname: str = None,
     adsorbate: str = "CO2",
-):
+) -> dict:
+    """Parse gRASPA SYCL simulation output and extract uptake data.
+
+    Args:
+        output_path: Path to directory containing simulation output.
+        calc_time: Whether to extract calculation time.
+        unit: Unit for uptake values ('mol/kg' or 'g/L').
+        output_fname: Name of the output log file.
+        cifname: CIF filename in output dir (auto-detected if None).
+        adsorbate: Adsorbate name (needed for g/L molar mass lookup).
+
+    Returns:
+        Dict with keys: success, uptake, error, unit, calc_time_in_s.
+
+    Raises:
+        ValueError: If parsing fails or adsorbate is unsupported for g/L.
+    """
     result = {"success": False, "uptake": 0, "error": 0, "unit": unit}
+    output_dir = Path(output_path)
     try:
-        with open(os.path.join(output_path, output_fname), "r") as rf:
+        with open(output_dir / output_fname, "r") as rf:
             for line in rf:
                 if "UnitCells" in line:
                     unitcell_line = line.strip()
@@ -82,13 +114,15 @@ def get_output_data(
         result["calc_time_in_s"] = float(time_line.split()[2])
 
         if cifname is None:
-            cif_list = glob.glob(os.path.join(output_path, "*.cif"))
+            cif_list = list(output_dir.glob("*.cif"))
             if len(cif_list) != 1:
-                raise ValueError(f"There are {len(cif_list)} in {output_path}.")
-            else:
-                cifpath = os.path.join(cif_list[0])
+                raise ValueError(
+                    f"Found {len(cif_list)} CIF files in "
+                    f"{output_path}, expected 1."
+                )
+            cifpath = str(cif_list[0])
         else:
-            cifpath = os.path.join(output_path, cifname)
+            cifpath = str(output_dir / cifname)
 
         uptake_total_molecule = float(uptake_line.split()[2][:-1])
         error_total_molecule = float(uptake_line.split()[4][:-1])
@@ -138,4 +172,3 @@ def get_output_data(
         return result
     except Exception as e:
         raise ValueError(e)
-        return result

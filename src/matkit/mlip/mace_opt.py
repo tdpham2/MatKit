@@ -8,7 +8,7 @@ from ase.constraints import ExpCellFilter
 def run_opt_mace(
     fname: str,
     run_type: str = "geo_opt",
-    steps: float = 1000,
+    steps: int = 1000,
     fmax: float = 1e-3,
     model: str = "medium",
     device: str = "cpu",
@@ -16,7 +16,22 @@ def run_opt_mace(
     default_dtype: str = "float64",
     write_traj: bool = False,
     output_fname: str = None,
-):
+) -> None:
+    """Run geometry and/or cell optimization using the MACE-MP model.
+
+    Args:
+        fname: Path to input structure file (CIF, XYZ, POSCAR, etc.).
+        run_type: Type of optimization - 'geo_opt', 'cell_opt', or
+            'geo_opt_cell_opt' (geometry first, then cell).
+        steps: Maximum number of optimization steps.
+        fmax: Force convergence criterion in eV/Angstrom.
+        model: MACE-MP model size ('small', 'medium', 'large').
+        device: Compute device ('cpu' or 'cuda').
+        dispersion: Whether to include D3 dispersion corrections.
+        default_dtype: Floating point precision ('float32' or 'float64').
+        write_traj: Whether to write ASE trajectory files.
+        output_fname: Output filename (auto-generated if None).
+    """
     try:
         atoms = ase_read(fname)
         atoms.calc = mace_mp(
@@ -50,14 +65,14 @@ def run_opt_mace(
                 dyn1.run(fmax=fmax, steps=steps)
                 ecf = ExpCellFilter(atoms)
                 dyn = BFGS(ecf, trajectory=f"{filename}_cell_opt.traj")
-                dyn1.run(fmax=fmax, steps=steps)
+                dyn.run(fmax=fmax, steps=steps)
 
             else:
                 dyn1 = BFGS(atoms)
                 dyn1.run(fmax=fmax, steps=steps)
                 ecf = ExpCellFilter(atoms)
                 dyn = BFGS(ecf)
-                dyn1.run(fmax=fmax, steps=steps)
+                dyn.run(fmax=fmax, steps=steps)
 
         else:
             print(

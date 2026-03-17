@@ -1,7 +1,5 @@
 import click
-import os
 import json
-from pathlib import Path
 from matkit.graspa import graspa
 from matkit.raspa2 import raspa2
 from matkit.tobacco import create_linker_from_smiles
