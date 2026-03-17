@@ -1,16 +1,30 @@
 from pathlib import Path
 import shutil
-import os
 from matkit.utils.unitcell_calculator import calculate_cell_size
 from ase.io import read as ase_read
 
 
 def get_output_data(
     output_path: str,
-    unit="mol/kg",
+    unit: str = "mol/kg",
     output_fname: str = "raspa.log",
     eos: bool = False,
-):
+) -> dict:
+    """Parse gRASPA simulation output and extract uptake data.
+
+    Args:
+        output_path: Path to directory containing simulation output.
+        unit: Unit for uptake values ('mol/kg', 'mg/g', or 'g/L').
+        output_fname: Name of the output log file.
+        eos: Whether equation of state was used (changes line indices).
+
+    Returns:
+        Dict with keys: success, uptake, error, unit, qst, error_qst,
+        qst_unit, calc_time_in_s.
+
+    Raises:
+        ValueError: If the output file cannot be parsed or unit is invalid.
+    """
     result = {
         "success": False,
         "uptake": None,
@@ -22,7 +36,7 @@ def get_output_data(
     }
     uptake_lines = []
     try:
-        with open(os.path.join(output_path, output_fname), "r") as rf:
+        with open(Path(output_path) / output_fname, "r") as rf:
             for line in rf:
                 if "Overall: Average" in line:
                     uptake_lines.append(line.strip())
@@ -80,8 +94,6 @@ def get_output_data(
     except Exception as e:
         raise ValueError(f"{e}")
 
-        return result
-
 
 DEFAULT_ADSORBATE_PARAMS = {
     "TranslationProbability": 1.0,
@@ -95,7 +107,19 @@ DEFAULT_ADSORBATE_PARAMS = {
 }
 
 
-def generate_component_blocks(adsorbates):
+def generate_component_blocks(adsorbates: list[dict]) -> str:
+    """Generate gRASPA component block text for simulation input.
+
+    Args:
+        adsorbates: List of dicts, each with a 'MoleculeName' key and
+            optional parameter overrides (e.g., SwapProbability).
+
+    Returns:
+        Formatted component block string for simulation.input.
+
+    Raises:
+        ValueError: If any adsorbate dict is missing 'MoleculeName'.
+    """
     lines = []
     for i, ad in enumerate(adsorbates):
         if "MoleculeName" not in ad:
@@ -122,13 +146,35 @@ def generate_component_blocks(adsorbates):
 def setup_simulation(
     cif: str,
     outpath: str,
-    adsorbates: list,
+    adsorbates: list[dict],
     temperature: float = 298.0,
     pressure: float = 1e5,
     cutoff: float = 12.8,
     n_cycle: int = 1000,
     template_dir: str = "template",
-):
+) -> bool:
+    """Set up a gRASPA GCMC simulation.
+
+    Copies template files to the output directory, substitutes
+    simulation parameters into the input file, and adds component
+    blocks for the specified adsorbates.
+
+    Args:
+        cif: Path to the input CIF structure file.
+        outpath: Directory to write simulation files to.
+        adsorbates: List of adsorbate dicts with 'MoleculeName' key.
+        temperature: Simulation temperature in Kelvin.
+        pressure: Simulation pressure in Pascals.
+        cutoff: Van der Waals cutoff radius in Angstrom.
+        n_cycle: Number of Monte Carlo cycles.
+        template_dir: Template subdirectory name under files/.
+
+    Returns:
+        True on success.
+
+    Raises:
+        FileNotFoundError: If the CIF file does not exist.
+    """
     outdir = Path(outpath)
     outdir.mkdir(parents=True, exist_ok=True)
 

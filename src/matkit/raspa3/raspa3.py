@@ -1,5 +1,5 @@
 import json
-import os
+from pathlib import Path
 
 
 def parse_raspa2_pseudo_atom(filepath):
@@ -122,7 +122,7 @@ def save_force_field(pseudo_fp, force_field_fp, outpath):
         "MixingRule": force_field["MixingRule"],
         "TruncationMethod": force_field["TruncationMethod"],
     }
-    output_file = os.path.join(outpath, "force_field.json")
+    output_file = Path(outpath) / "force_field.json"
     with open(output_file, "w") as f:
         json.dump(combined, f, indent=2)
 

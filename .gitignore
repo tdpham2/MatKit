@@ -171,8 +171,7 @@ cython_debug/
 .pypirc
 
 # data files
-data/
+/data/
 
-# tests files
-tests/
+# project workspace
 projects/

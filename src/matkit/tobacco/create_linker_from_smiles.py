@@ -1,4 +1,6 @@
 import subprocess
+from pathlib import Path
+
 import numpy as np
 import networkx as nx
 from ase.io import read as ase_read, write as ase_write
@@ -182,11 +184,12 @@ def update_cif_with_connection_site(
     with open(output_cif, "w", encoding="utf-8") as f:
         f.write("\n".join(processed_lines) + "\n")
     # Replace connection sites with X atoms
+    with open(output_cif, "r", encoding="utf-8") as f:
+        content = f.read()
     for old_label, new_label in connection_labels.items():
-        subprocess.run(
-            ["sed", "-i", "-e", f"s|{old_label}|{new_label}|g", output_cif],
-            check=True,
-        )
+        content = content.replace(old_label, new_label)
+    with open(output_cif, "w", encoding="utf-8") as f:
+        f.write(content)
 
 
 def update_aromatic_bond(cif_in, cif_out):
@@ -229,7 +232,10 @@ def smiles_to_cif(smiles, output_prefix="L1"):
     cif_file = "temp.cif"
     final_cif = f"{output_prefix}.cif"
 
-    subprocess.call(f"obabel -:'{smiles}' -O {xyz_file} --gen3d", shell=True)
+    subprocess.run(
+        ["obabel", f"-:{smiles}", "-O", xyz_file, "--gen3d"],
+        check=True,
+    )
     struct = ase_read(xyz_file)
     struct.set_cell([40, 40, 40])
     struct.set_pbc(True)
@@ -294,7 +300,8 @@ def smiles_to_cif(smiles, output_prefix="L1"):
             f"{bond_block}"
         )
 
-    subprocess.call(f"rm {xyz_file} {cif_file}", shell=True)
+    Path(xyz_file).unlink(missing_ok=True)
+    Path(cif_file).unlink(missing_ok=True)
     return final_cif
 
 
@@ -310,11 +317,10 @@ def create_linker(
     update_cif_with_connection_site(initial_cif, connection_sites, "temp.cif")
     update_aromatic_bond("temp.cif", output_cif)
 
-    # Cleanup intermediate files if needed, or keep them.
-    # For now, we leave them as the original script did?
-    # The original script does `rm temp.cif` implicitely by overwriting or maybe not.
-    # Actually, original script leaves `temp.cif`.
-    # We will just print success.
+    # Cleanup intermediate files
+    Path(initial_cif).unlink(missing_ok=True)
+    Path("temp.cif").unlink(missing_ok=True)
+
     print(f"Successfully created linker: {output_cif}")
 
 

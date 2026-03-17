@@ -12,7 +12,14 @@ dependencies = [
     "ase>=3.22",
     "click>=8.0",
     "networkx>=2.6",
+    "numpy>=1.22",
 ]
+
+[project.optional-dependencies]
+rdkit = ["rdkit"]
+mlip = ["mace-torch"]
+all = ["rdkit", "mace-torch"]
+dev = ["pytest>=7.0", "ruff>=0.4"]
 
 [project.scripts]
 matkit = "matkit.cli:main"
@@ -26,6 +33,11 @@ line-length = 80
 [tool.ruff.lint]
 select = ["E", "F"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+
 [tool.setuptools]
 include-package-data = true
 
@@ -33,4 +45,6 @@ include-package-data = true
 "matkit.raspa2.files.template" = ["*"]
 "matkit.graspa_sycl.files.template" = ["*"]
 "matkit.graspa.files.template" = ["*"]
-"matkit.graspa.files.template_mixture_isotherm" = ['*']
+"matkit.graspa.files.template_mixture" = ["*"]
+"matkit.graspa.files.template_co2_n2" = ["*"]
+"matkit.graspa.files.template_mixture_isotherm" = ["*"]

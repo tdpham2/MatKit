@@ -2,9 +2,7 @@ import numpy as np
 import ase
 
 
-def calculate_cell_size(
-    atoms: ase.Atoms, cutoff: float = 12.8
-) -> list[int, int, int]:
+def calculate_cell_size(atoms: ase.Atoms, cutoff: float = 12.8) -> list[int]:
     """Method to calculate Unitcells (for periodic boundary condition).
 
     Args:

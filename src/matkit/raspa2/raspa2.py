@@ -1,6 +1,5 @@
 from pathlib import Path
 import shutil
-import os
 from matkit.utils.unitcell_calculator import calculate_cell_size
 from ase.io import read as ase_read
 
@@ -15,16 +14,36 @@ def setup_input_simulation(
     pressure: float = 1e5,
     cutoff: float = 12.8,
     n_cycle: int = 1000,
-):
+) -> bool:
+    """Set up RASPA2 GCMC simulations for one or more CIF structures.
+
+    Creates a subdirectory per CIF file, copies template files, and
+    substitutes simulation parameters into each input file.
+
+    Args:
+        cifs: List of paths to input CIF structure files.
+        outpath: Base directory to write simulation subdirectories to.
+        adsorbate: Adsorbate molecule name (e.g., 'CO2').
+        temperature: Simulation temperature in Kelvin.
+        pressure: Simulation pressure in Pascals.
+        cutoff: Van der Waals cutoff radius in Angstrom.
+        n_cycle: Number of Monte Carlo cycles.
+
+    Returns:
+        True on success.
+
+    Raises:
+        FileNotFoundError: If any CIF file does not exist.
+    """
     outpath = Path(outpath)
 
     for cif in cifs:
         cifpath = Path(cif)
         if not cifpath.exists():
-            raise FileNotFoundError(f"Source directory does not exist: {cif}")
+            raise FileNotFoundError(f"CIF file does not exist: {cif}")
 
-        cifname = cif.split("/")[-1][:-4]
-        outdir = Path(os.path.join(outpath, cifname))
+        cifname = cifpath.stem
+        outdir = outpath / cifname
         outdir.mkdir(parents=True, exist_ok=True)
         for item in _file_dir.iterdir():
             if item.is_dir():
@@ -66,7 +85,24 @@ def setup_input_simulation(
     return True
 
 
-def get_output_data(output_path, calc_time=False, unit="mol/kg"):
+def get_output_data(
+    output_path: str, calc_time: bool = False, unit: str = "mol/kg"
+) -> dict:
+    """Parse RASPA2 simulation output and extract uptake data.
+
+    Args:
+        output_path: Path to the RASPA2 output file.
+        calc_time: Whether to extract calculation time from log.
+        unit: Unit for uptake values ('mol/kg' or 'g/L').
+
+    Returns:
+        Dict with keys: success, uptake, error, unit, and optionally
+        calc_time_in_s.
+
+    Raises:
+        ValueError: If expected output lines are not found or unit
+            is unsupported.
+    """
     result = {"success": False, "uptake": 0, "error": 0, "unit": unit}
     with open(output_path, "r") as file:
         for line in file:
@@ -97,7 +133,7 @@ def get_output_data(output_path, calc_time=False, unit="mol/kg"):
         result["uptake"] = uptake_g_L
         result["error"] = error_g_L
     else:
-        raise ValueError("Unit {unit} is not supported yet.")
+        raise ValueError(f"Unit {unit} is not supported yet.")
 
     if calc_time:
         from datetime import datetime
