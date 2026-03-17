@@ -259,5 +259,286 @@ def tobacco_create(smiles, site, out):
         click.echo(f"Error creating linker: {e}", err=True)
 
 
+# ==========================================
+# PLOT COMMANDS
+# ==========================================
+@main.group("plot")
+def plot_cli():
+    """Commands for plotting simulation data."""
+    pass
+
+
+@plot_cli.command("isotherm")
+@click.option(
+    "--data",
+    multiple=True,
+    type=click.Path(exists=True),
+    help="Path to isotherm JSON file. Can be specified multiple "
+    "times to overlay plots.",
+)
+@click.option(
+    "--data-dir",
+    default=None,
+    type=click.Path(exists=True, file_okay=False),
+    help="Directory containing isotherm JSON files. "
+    "All *.json files are loaded and overlaid.",
+)
+@click.option(
+    "--output",
+    default=None,
+    type=click.Path(),
+    help="Output image file path (default: isotherm_plot.png "
+    "or mixture_isotherm_plot.png).",
+)
+@click.option("--dpi", default=600, help="Image resolution in DPI.")
+@click.option(
+    "--figsize",
+    nargs=2,
+    type=float,
+    default=(8, 6),
+    help="Figure size as WIDTH HEIGHT in inches.",
+)
+@click.option(
+    "--adsorbate",
+    multiple=True,
+    help="Adsorbate(s) to include in mixture plots. "
+    "Can be specified multiple times. "
+    "Omit to plot all discovered adsorbates.",
+)
+@click.option(
+    "--label",
+    multiple=True,
+    help="Legend label for each --data file. Can be specified multiple times.",
+)
+@click.option("--xlabel", default=None, help="Custom x-axis label.")
+@click.option("--ylabel", default=None, help="Custom y-axis label.")
+@click.option("--title", default=None, help="Plot title.")
+@click.option("--log-x", is_flag=True, help="Use logarithmic x-axis.")
+@click.option("--log-y", is_flag=True, help="Use logarithmic y-axis.")
+@click.option(
+    "--no-errorbars",
+    is_flag=True,
+    help="Omit error bars from the plot.",
+)
+@click.option(
+    "--fontsize-label",
+    default=24,
+    help="Font size for axis labels.",
+)
+@click.option(
+    "--fontsize-tick",
+    default=16,
+    help="Font size for tick labels.",
+)
+@click.option(
+    "--fontsize-legend",
+    default=16,
+    help="Font size for legend text.",
+)
+def plot_isotherm_cmd(
+    data,
+    data_dir,
+    output,
+    dpi,
+    figsize,
+    adsorbate,
+    label,
+    xlabel,
+    ylabel,
+    title,
+    log_x,
+    log_y,
+    no_errorbars,
+    fontsize_label,
+    fontsize_tick,
+    fontsize_legend,
+):
+    """Plot isotherms from simulation JSON data.
+
+    Auto-detects the data format (single-component pressure
+    isotherm or mixture RH isotherm) and generates the
+    appropriate plot. Multiple --data files or a --data-dir
+    can be specified to overlay isotherms for comparison.
+
+    \b
+    Examples:
+      matkit plot isotherm --data CO2_isotherm_298K.json
+      matkit plot isotherm --data-dir results/
+      matkit plot isotherm --data r1.json --data r2.json
+      matkit plot isotherm --data mixture.json --adsorbate co2
+      matkit plot isotherm --data CO2.json --log-x
+    """
+    try:
+        from matkit.plot.parsers import (
+            collect_data_files,
+            load_isotherm,
+        )
+
+        files = collect_data_files(data=data, data_dir=data_dir)
+
+        # Detect format from first file to route correctly
+        parsed = load_isotherm(files[0])
+        fmt = parsed["format"]
+
+        common_kwargs = dict(
+            output=output,
+            dpi=dpi,
+            figsize=figsize,
+            xlabel=xlabel,
+            ylabel=ylabel,
+            title=title,
+            labels=list(label) if label else None,
+            log_x=log_x,
+            log_y=log_y,
+            no_errorbars=no_errorbars,
+            fontsize_label=fontsize_label,
+            fontsize_tick=fontsize_tick,
+            fontsize_legend=fontsize_legend,
+        )
+
+        if fmt == "mixture_rh":
+            from matkit.plot.isotherm import (
+                plot_mixture_isotherm,
+            )
+
+            common_kwargs["adsorbates"] = list(adsorbate) if adsorbate else None
+            if output is None:
+                common_kwargs["output"] = "mixture_isotherm_plot.png"
+            out = plot_mixture_isotherm(files, **common_kwargs)
+        else:
+            from matkit.plot.isotherm import (
+                plot_single_isotherm,
+            )
+
+            if output is None:
+                common_kwargs["output"] = "isotherm_plot.png"
+            out = plot_single_isotherm(files, **common_kwargs)
+
+        click.echo(f"Plot saved to {out}")
+
+    except ImportError:
+        click.echo(
+            "Error: matplotlib is required for plotting. "
+            "Install with: pip install matkit[plot]",
+            err=True,
+        )
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+
+
+@plot_cli.command("selectivity")
+@click.option(
+    "--data",
+    required=True,
+    multiple=True,
+    type=click.Path(exists=True),
+    help="Path to mixture isotherm JSON file. Can be specified multiple times.",
+)
+@click.option(
+    "--output",
+    default="selectivity_plot.png",
+    type=click.Path(),
+    help="Output image file path.",
+)
+@click.option("--dpi", default=600, help="Image resolution in DPI.")
+@click.option(
+    "--figsize",
+    nargs=2,
+    type=float,
+    default=(8, 6),
+    help="Figure size as WIDTH HEIGHT in inches.",
+)
+@click.option(
+    "--selectivity-key",
+    multiple=True,
+    help="Selectivity field(s) to plot (e.g. co2_n2_selectivity). "
+    "Omit to plot all discovered selectivity fields.",
+)
+@click.option(
+    "--label",
+    multiple=True,
+    help="Legend label for each --data file.",
+)
+@click.option("--xlabel", default=None, help="Custom x-axis label.")
+@click.option("--ylabel", default=None, help="Custom y-axis label.")
+@click.option("--title", default=None, help="Plot title.")
+@click.option("--log-x", is_flag=True, help="Use logarithmic x-axis.")
+@click.option("--log-y", is_flag=True, help="Use logarithmic y-axis.")
+@click.option(
+    "--fontsize-label",
+    default=24,
+    help="Font size for axis labels.",
+)
+@click.option(
+    "--fontsize-tick",
+    default=16,
+    help="Font size for tick labels.",
+)
+@click.option(
+    "--fontsize-legend",
+    default=16,
+    help="Font size for legend text.",
+)
+def plot_selectivity_cmd(
+    data,
+    output,
+    dpi,
+    figsize,
+    selectivity_key,
+    label,
+    xlabel,
+    ylabel,
+    title,
+    log_x,
+    log_y,
+    fontsize_label,
+    fontsize_tick,
+    fontsize_legend,
+):
+    """Plot selectivity vs relative humidity from mixture data.
+
+    Selectivity keys are auto-discovered from the JSON data
+    (e.g. co2_n2_selectivity). Multiple --data files can be
+    overlaid for comparison.
+
+    \b
+    Examples:
+      matkit plot selectivity --data mixture.json
+      matkit plot selectivity --data m1.json --data m2.json
+      matkit plot selectivity --data mixture.json --log-y
+    """
+    try:
+        from matkit.plot.isotherm import plot_selectivity
+
+        out = plot_selectivity(
+            data_files=list(data),
+            output=output,
+            dpi=dpi,
+            figsize=figsize,
+            selectivity_keys=(
+                list(selectivity_key) if selectivity_key else None
+            ),
+            xlabel=xlabel,
+            ylabel=ylabel,
+            title=title,
+            labels=list(label) if label else None,
+            log_x=log_x,
+            log_y=log_y,
+            fontsize_label=fontsize_label,
+            fontsize_tick=fontsize_tick,
+            fontsize_legend=fontsize_legend,
+        )
+        click.echo(f"Plot saved to {out}")
+
+    except ImportError:
+        click.echo(
+            "Error: matplotlib is required for plotting. "
+            "Install with: pip install matkit[plot]",
+            err=True,
+        )
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+
+
 if __name__ == "__main__":
     main()

@@ -1,0 +1,32 @@
+{
+    "0_RH": {
+        "co2_uptake": 3.99067,
+        "n2_uptake": 0.0222,
+        "h2o_uptake": 0.0,
+        "co2_error": 0.08111,
+        "n2_error": 0.00105,
+        "h2o_error": 0.0,
+        "co2_n2_selectivity": 1018.64,
+        "calc_time_in_s": 3332.97
+    },
+    "50_RH": {
+        "co2_uptake": 0.16258,
+        "n2_uptake": 0.00139,
+        "h2o_uptake": 11.3265,
+        "co2_error": 0.05529,
+        "n2_error": 0.00077,
+        "h2o_error": 0.1287,
+        "co2_n2_selectivity": 662.80,
+        "calc_time_in_s": 10863.46
+    },
+    "100_RH": {
+        "co2_uptake": 0.03966,
+        "n2_uptake": 0.0002,
+        "h2o_uptake": 12.94059,
+        "co2_error": 0.01295,
+        "n2_error": 0.00015,
+        "h2o_error": 0.17625,
+        "co2_n2_selectivity": 1123.70,
+        "calc_time_in_s": 10481.06
+    }
+}

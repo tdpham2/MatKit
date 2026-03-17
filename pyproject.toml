@@ -18,7 +18,8 @@ dependencies = [
 [project.optional-dependencies]
 rdkit = ["rdkit"]
 mlip = ["mace-torch"]
-all = ["rdkit", "mace-torch"]
+plot = ["matplotlib>=3.5"]
+all = ["rdkit", "mace-torch", "matplotlib>=3.5"]
 dev = ["pytest>=7.0", "ruff>=0.4"]
 
 [project.scripts]
