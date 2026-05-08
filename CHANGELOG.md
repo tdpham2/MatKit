@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Zeo++ module (`matkit.zeopp`) for pore geometry analysis: pore diameters (Di/Df/Dif), accessible surface area, accessible volume, pore size distribution, and channel identification
+- CLI `matkit zeopp run` and `matkit zeopp analyze` subcommands with support for high accuracy mode (`-ha`), custom radii files (`-r UFF.rad`), and configurable probe parameters
 - CLI interface (`matkit` command) with subcommands for graspa, graspa_sycl, raspa2, and tobacco
 - `__init__.py` re-exports for all subpackages (io, mlip, orca, utils, graspa, graspa_sycl, raspa2, raspa3, tobacco)
 - Optional dependency groups in pyproject.toml: `rdkit`, `mlip`, `all`, `dev`

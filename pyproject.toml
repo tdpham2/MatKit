@@ -49,3 +49,4 @@ include-package-data = true
 "matkit.graspa.files.template_mixture" = ["*"]
 "matkit.graspa.files.template_co2_n2" = ["*"]
 "matkit.graspa.files.template_mixture_isotherm" = ["*"]
+"matkit.zeopp.files" = ["*"]

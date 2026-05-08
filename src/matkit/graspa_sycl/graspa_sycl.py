@@ -103,6 +103,9 @@ def get_output_data(
     result = {"success": False, "uptake": 0, "error": 0, "unit": unit}
     output_dir = Path(output_path)
     try:
+        unitcell_line = None
+        uptake_line = None
+        time_line = None
         with open(output_dir / output_fname, "r") as rf:
             for line in rf:
                 if "UnitCells" in line:
@@ -111,6 +114,12 @@ def get_output_data(
                     uptake_line = line.strip()
                 elif "Work" in line:
                     time_line = line.strip()
+        if time_line is None:
+            raise ValueError("Could not find timing line in output.")
+        if uptake_line is None:
+            raise ValueError("Could not find uptake line in output.")
+        if unitcell_line is None:
+            raise ValueError("Could not find unit cell line in output.")
         result["calc_time_in_s"] = float(time_line.split()[2])
 
         if cifname is None:
@@ -168,7 +177,8 @@ def get_output_data(
             )
             result["uptake"] = uptake_g_L
             result["error"] = error_g_L
+            result["success"] = True
 
         return result
     except Exception as e:
-        raise ValueError(e)
+        raise ValueError(f"Failed to parse output: {e}") from e

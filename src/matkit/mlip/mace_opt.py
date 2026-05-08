@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from mace.calculators import mace_mp
 from ase.io import read as ase_read
 from ase.io import write as ase_write
@@ -40,11 +42,12 @@ def run_opt_mace(
             default_dtype=default_dtype,
             device=device,
         )
-        if output_fname is None:
-            filename = fname.split(".")[0]
-            ext = fname.split(".")[-1]
+        fpath = Path(fname)
+        filename = str(fpath.with_suffix(""))
+        ext = fpath.suffix
 
-            output_fname = filename + f"_opt_{model}" + "." + ext
+        if output_fname is None:
+            output_fname = f"{filename}_opt_{model}{ext}"
         if run_type == "geo_opt":
             if write_traj is True:
                 dyn = BFGS(atoms, trajectory=f"{filename}.traj")

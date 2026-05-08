@@ -7,7 +7,8 @@ import numpy as np
 
 
 def remove_solvent(path_to_cif, output_path, mass_ratio=0.8, skin=0.3):
-    """ Remove solvent, ions from a MOF using either chemical formula or ASE neighborlist
+    """Remove solvent, ions from a MOF using ASE
+    neighborlist
 
     Parameters:
         cif: str, absolute path to cif file
@@ -39,7 +40,8 @@ def remove_solvent(path_to_cif, output_path, mass_ratio=0.8, skin=0.3):
         g = list(g)
         fragment = atoms[g]
         fragment = sort(fragment)
-        massG.append(sum(atoms[g].get_masses())) # Mass of each disconnected subgraph
+        # Mass of each disconnected subgraph
+        massG.append(sum(atoms[g].get_masses()))
 
     max_index = np.argmax(massG)
     for index, mass in enumerate(massG):
