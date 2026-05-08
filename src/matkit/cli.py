@@ -3,6 +3,7 @@ import json
 from matkit.graspa import graspa
 from matkit.raspa2 import raspa2
 from matkit.tobacco import create_linker_from_smiles
+from matkit.zeopp import zeopp
 
 
 from matkit.graspa_sycl import graspa_sycl
@@ -538,6 +539,110 @@ def plot_selectivity_cmd(
         )
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
+
+
+# ==========================================
+# ZEOPP COMMANDS
+# ==========================================
+@main.group("zeopp")
+def zeopp_cli():
+    """Commands for Zeo++ pore analysis."""
+    pass
+
+
+@zeopp_cli.command("run")
+@click.option(
+    "--cif",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to input CIF file.",
+)
+@click.option(
+    "--analysis",
+    multiple=True,
+    default=["res"],
+    type=click.Choice(["res", "sa", "vol", "psd", "chan"]),
+    help="Analysis type. Can be specified multiple times.",
+)
+@click.option(
+    "--probe-radius",
+    default=1.86,
+    help="Probe radius in Angstrom.",
+)
+@click.option(
+    "--chan-radius",
+    default=1.86,
+    help="Channel radius in Angstrom.",
+)
+@click.option(
+    "--num-samples",
+    default=2000,
+    help="Number of Monte Carlo samples.",
+)
+@click.option(
+    "--ha/--no-ha",
+    default=True,
+    help="Use high accuracy mode (-ha). Default: enabled.",
+)
+@click.option(
+    "--radii",
+    default=None,
+    type=click.Path(exists=True),
+    help="Path to atomic radii file (e.g. UFF.rad).",
+)
+@click.option(
+    "--network-path",
+    default=None,
+    type=click.Path(),
+    help="Path to Zeo++ network binary.",
+)
+@click.option(
+    "--outdir",
+    default=None,
+    type=click.Path(),
+    help="Output directory for result files.",
+)
+def zeopp_run(cif, analysis, probe_radius, chan_radius, num_samples,
+              ha, radii, network_path, outdir):
+    """Run Zeo++ analysis on a CIF structure."""
+    try:
+        result = zeopp.run_zeopp(
+            cif=cif,
+            analyses=list(analysis),
+            probe_radius=probe_radius,
+            chan_radius=chan_radius,
+            num_samples=num_samples,
+            ha=ha,
+            radii_file=radii,
+            network_path=network_path,
+            output_dir=outdir,
+        )
+        click.echo(json.dumps(result, indent=2))
+    except Exception as e:
+        click.echo(f"Error running Zeo++: {e}", err=True)
+
+
+@zeopp_cli.command("analyze")
+@click.option(
+    "--path",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to Zeo++ output directory or file.",
+)
+@click.option(
+    "--analysis",
+    multiple=True,
+    type=click.Choice(["res", "sa", "vol", "psd", "chan"]),
+    help="Analysis types to parse. Auto-detects if omitted.",
+)
+def zeopp_analyze(path, analysis):
+    """Parse existing Zeo++ output files."""
+    try:
+        analyses = list(analysis) if analysis else None
+        result = zeopp.get_output_data(path, analyses=analyses)
+        click.echo(json.dumps(result, indent=2))
+    except Exception as e:
+        click.echo(f"Error analyzing Zeo++ results: {e}", err=True)
 
 
 if __name__ == "__main__":

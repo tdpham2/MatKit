@@ -17,6 +17,7 @@ src/matkit/
   graspa_sycl/              # gRASPA SYCL (Intel GPU) simulations
   raspa2/                   # RASPA2 simulations
   raspa3/                   # RASPA2 -> RASPA3 format conversion
+  zeopp/                    # Zeo++ pore geometry analysis (wraps network binary)
   tobacco/                  # SMILES -> CIF linker generation for ToBaCCo
   mlip/                     # MACE-MP ML interatomic potential optimization
   orca/                     # ORCA quantum chemistry (stub)
@@ -32,6 +33,8 @@ Each simulation engine module follows a two-function pattern:
 
 Template files are stored in `<module>/files/template*/` directories and use simple string replacement (not Jinja2).
 
+The `zeopp` module wraps the Zeo++ `network` binary (an external analysis tool, not a simulation engine). It uses `run_zeopp()` to invoke the binary via subprocess and `get_output_data()` to parse output files (.res, .sa, .vol, .psd, .chan). No template files are needed.
+
 ### CLI structure
 
 ```
@@ -39,6 +42,7 @@ matkit <engine> <action>
   graspa setup|analyze
   graspa_sycl setup|analyze
   raspa2 setup|analyze
+  zeopp run|analyze
   tobacco create
 ```
 
