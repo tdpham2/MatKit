@@ -7,4 +7,4 @@ def run_orca(
     run_type: str,
 ):
     profile = OrcaProfile(command=orca_command)
-    calc = ORCA(profile=profile)
+    _calc = ORCA(profile=profile)

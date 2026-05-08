@@ -150,7 +150,8 @@ def update_cif_with_connection_site(
 
     Args:
         input_cif: Path to input CIF file
-        connection_sites: List of atom labels to be converted to connection sites
+        connection_sites: List of atom labels to be
+            converted to connection sites
         output_cif: Path to output CIF file
     """
     # Read and clean input file
@@ -193,7 +194,8 @@ def update_cif_with_connection_site(
 
 
 def update_aromatic_bond(cif_in, cif_out):
-    """Update CIF file by converting single bonds in aromatic rings to aromatic bonds."""
+    """Update CIF: convert single bonds in aromatic rings
+    to aromatic bonds."""
     with open(cif_in, encoding="utf-8") as f:
         data = [line.strip() for line in f if line.strip()]
 
@@ -257,11 +259,20 @@ def smiles_to_cif(smiles, output_prefix="L1"):
     for i, atom in enumerate(struct):
         label = f"{atom.symbol}{i + 1}"
         x, y, z = np.round(scaled_pos[i], 5)
-        pos_block += f"{label:<10}{atom.symbol:<6}{x:<10}{y:<10}{z:<10}0.00000  Uiso   1.00      0.00000\n"
+        pos_block += (
+            f"{label:<10}{atom.symbol:<6}"
+            f"{x:<10}{y:<10}{z:<10}"
+            f"0.00000  Uiso   1.00      0.00000\n"
+        )
         indices, _ = nl.get_neighbors(i)
         for j in indices:
             d = struct.get_distance(i, j, mic=True)
-            bond_block += f"{label:<6}{struct[j].symbol}{j + 1:<6}{round(d, 4):<8}.     S\n"
+            jlabel = f"{struct[j].symbol}{j + 1}"
+            dist = round(d, 4)
+            bond_block += (
+                f"{label:<6}{jlabel:<6}"
+                f"{dist:<8}.     S\n"
+            )
 
     with open(final_cif, "w", encoding="utf-8") as f:
         f.write(
