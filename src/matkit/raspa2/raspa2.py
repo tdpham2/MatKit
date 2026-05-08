@@ -104,6 +104,9 @@ def get_output_data(
             is unsupported.
     """
     result = {"success": False, "uptake": 0, "error": 0, "unit": unit}
+    mol_kg_line = None
+    mg_g_line = None
+    density_line = None
     with open(output_path, "r") as file:
         for line in file:
             if "Average loading absolute [mol/kg framework]" in line:

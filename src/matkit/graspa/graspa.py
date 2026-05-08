@@ -36,6 +36,7 @@ def get_output_data(
     }
     uptake_lines = []
     try:
+        time_line = None
         with open(Path(output_path) / output_fname, "r") as rf:
             for line in rf:
                 if "Overall: Average" in line:
@@ -43,37 +44,42 @@ def get_output_data(
                 if "Work" in line:
                     time_line = line.strip()
 
+        if time_line is None:
+            raise ValueError("Could not find timing line in output.")
+        if not uptake_lines:
+            raise ValueError("Could not find uptake lines in output.")
+
         result_qst = uptake_lines[0].split(",")
-        qst = result_qst[0].split()[-1]
-        error_qst = result_qst[1].split()[-1]
+        qst = float(result_qst[0].split()[-1])
+        error_qst = float(result_qst[1].split()[-1])
         result["qst"] = qst
         result["error_qst"] = error_qst
 
         if not eos:
             result_mol_kg = uptake_lines[6].split(",")
-            uptake_mol_kg = result_mol_kg[0].split()[-1]
-            error_mol_kg = result_mol_kg[1].split()[-1]
+            uptake_mol_kg = float(result_mol_kg[0].split()[-1])
+            error_mol_kg = float(result_mol_kg[1].split()[-1])
 
             result_mg_g = uptake_lines[4].split(",")
-            uptake_mg_g = result_mg_g[0].split()[-1]
-            error_mg_g = result_mg_g[1].split()[-1]
+            uptake_mg_g = float(result_mg_g[0].split()[-1])
+            error_mg_g = float(result_mg_g[1].split()[-1])
 
             result_g_L = uptake_lines[7].split(",")
-            uptake_g_L = result_g_L[0].split()[-1]
-            error_g_L = result_g_L[1].split()[-1]
+            uptake_g_L = float(result_g_L[0].split()[-1])
+            error_g_L = float(result_g_L[1].split()[-1])
 
         else:
             result_mol_kg = uptake_lines[11].split(",")
-            uptake_mol_kg = result_mol_kg[0].split()[-1]
-            error_mol_kg = result_mol_kg[1].split()[-1]
+            uptake_mol_kg = float(result_mol_kg[0].split()[-1])
+            error_mol_kg = float(result_mol_kg[1].split()[-1])
 
             result_mg_g = uptake_lines[5].split(",")
-            uptake_mg_g = result_mg_g[0].split()[-1]
-            error_mg_g = result_mg_g[1].split()[-1]
+            uptake_mg_g = float(result_mg_g[0].split()[-1])
+            error_mg_g = float(result_mg_g[1].split()[-1])
 
             result_g_L = uptake_lines[13].split(",")
-            uptake_g_L = result_g_L[0].split()[-1]
-            error_g_L = result_g_L[1].split()[-1]
+            uptake_g_L = float(result_g_L[0].split()[-1])
+            error_g_L = float(result_g_L[1].split()[-1])
 
         if unit == "mol/kg":
             result["uptake"] = uptake_mol_kg
@@ -92,7 +98,7 @@ def get_output_data(
         result["success"] = True
         return result
     except Exception as e:
-        raise ValueError(f"{e}")
+        raise ValueError(f"Failed to parse output: {e}") from e
 
 
 DEFAULT_ADSORBATE_PARAMS = {
