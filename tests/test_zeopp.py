@@ -1,5 +1,6 @@
 """Tests for matkit.zeopp module."""
 
+import json
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -13,6 +14,7 @@ from matkit.zeopp.zeopp import (
     _parse_psd,
     _parse_chan,
     get_output_data,
+    run_batch,
     run_zeopp,
 )
 
@@ -282,3 +284,102 @@ class TestRunZeopp:
         )
         with pytest.raises(ValueError, match="network failed"):
             run_zeopp(sample_cif, output_dir="/tmp/zeopp_test_fail")
+
+
+class TestRunBatch:
+    """Tests for batch processing of CIF files."""
+
+    @patch("matkit.zeopp.zeopp.run_zeopp")
+    def test_writes_results_jsonl(self, mock_run, tmp_path):
+        """Should write results.jsonl with one line per CIF."""
+        # Create dummy CIF files
+        cif_dir = tmp_path / "cifs"
+        cif_dir.mkdir()
+        for name in ["mof_a", "mof_b", "mof_c"]:
+            (cif_dir / f"{name}.cif").write_text("data_test")
+
+        mock_run.return_value = {
+            "success": True,
+            "results": {
+                "res": {
+                    "Di": 10.0, "Df": 5.0,
+                    "Dif": 7.0, "unit": "Angstrom",
+                },
+            },
+            "error": None,
+        }
+
+        outdir = tmp_path / "out"
+        result_path = run_batch(
+            cif_dir=str(cif_dir),
+            output_dir=str(outdir),
+            analyses=["res"],
+        )
+
+        assert Path(result_path).exists()
+        lines = Path(result_path).read_text().strip().split("\n")
+        assert len(lines) == 3
+
+        records = [json.loads(line) for line in lines]
+        # Sorted by structure name
+        names = [r["structure"] for r in records]
+        assert names == ["mof_a", "mof_b", "mof_c"]
+
+        for rec in records:
+            assert rec["status"] == "success"
+            assert rec["Di"] == 10.0
+            assert rec["Df"] == 5.0
+
+    @patch("matkit.zeopp.zeopp.run_zeopp")
+    def test_handles_failures(self, mock_run, tmp_path):
+        """Should capture failures without crashing."""
+        cif_dir = tmp_path / "cifs"
+        cif_dir.mkdir()
+        (cif_dir / "good.cif").write_text("data_test")
+        (cif_dir / "bad.cif").write_text("data_test")
+
+        def side_effect(cif, **kwargs):
+            if "bad" in cif:
+                raise ValueError("parse error")
+            return {
+                "success": True,
+                "results": {
+                    "res": {
+                        "Di": 10.0, "Df": 5.0,
+                        "Dif": 7.0, "unit": "Angstrom",
+                    },
+                },
+                "error": None,
+            }
+
+        mock_run.side_effect = side_effect
+
+        outdir = tmp_path / "out"
+        result_path = run_batch(
+            cif_dir=str(cif_dir),
+            output_dir=str(outdir),
+            analyses=["res"],
+        )
+
+        lines = Path(result_path).read_text().strip().split("\n")
+        assert len(lines) == 2
+
+        records = [json.loads(line) for line in lines]
+        statuses = {r["structure"]: r["status"] for r in records}
+        assert statuses["bad"] == "failure"
+        assert statuses["good"] == "success"
+
+        bad_rec = next(r for r in records if r["structure"] == "bad")
+        assert "parse error" in bad_rec["error_message"]
+
+    def test_missing_dir_raises(self):
+        """Should raise FileNotFoundError for missing directory."""
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            run_batch("/nonexistent/dir", "/tmp/out")
+
+    def test_empty_dir_raises(self, tmp_path):
+        """Should raise FileNotFoundError if no CIFs found."""
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        with pytest.raises(FileNotFoundError, match="No CIF"):
+            run_batch(str(empty), str(tmp_path / "out"))

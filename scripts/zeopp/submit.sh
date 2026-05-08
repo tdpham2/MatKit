@@ -13,27 +13,23 @@ cd $PBS_O_WORKDIR
 
 # ----- User Configuration ----- #
 CIF_DIR="${CIF_DIR:-.}"
+OUTPUT_DIR="${OUTPUT_DIR:-./zeopp_results}"
 NETWORK_BIN="${NETWORK_BIN:-$HOME/soft/zeo++-0.3/network}"
 NUM_SAMPLES="${NUM_SAMPLES:-100000}"
 PROBE_RADIUS="${PROBE_RADIUS:-1.86}"
 CHAN_RADIUS="${CHAN_RADIUS:-1.86}"
+MAX_WORKERS="${MAX_WORKERS:-32}"
 # ------------------------------- #
 
-for cif in "${CIF_DIR}"/*.cif; do
-    [ -f "$cif" ] || continue
-    name=$(basename "$cif" .cif)
-    echo "Running Zeo++ on $name ..."
+matkit zeopp run-batch \
+    --cif-dir "$CIF_DIR" \
+    --outdir "$OUTPUT_DIR" \
+    --analysis res \
+    --analysis sa \
+    --network-path "$NETWORK_BIN" \
+    --probe-radius "$PROBE_RADIUS" \
+    --chan-radius "$CHAN_RADIUS" \
+    --num-samples "$NUM_SAMPLES" \
+    --max-workers "$MAX_WORKERS"
 
-    matkit zeopp run \
-        --cif "$cif" \
-        --analysis res \
-        --analysis sa \
-        --network-path "$NETWORK_BIN" \
-        --probe-radius "$PROBE_RADIUS" \
-        --chan-radius "$CHAN_RADIUS" \
-        --num-samples "$NUM_SAMPLES" \
-        --outdir "${CIF_DIR}/${name}_zeopp" &
-done
-
-wait
-echo "All Zeo++ jobs finished with exit code $?"
+echo "Finished with exit code $?"

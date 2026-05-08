@@ -645,5 +645,97 @@ def zeopp_analyze(path, analysis):
         click.echo(f"Error analyzing Zeo++ results: {e}", err=True)
 
 
+@zeopp_cli.command("run-batch")
+@click.option(
+    "--cif-dir",
+    required=True,
+    type=click.Path(exists=True, file_okay=False),
+    help="Directory containing CIF files.",
+)
+@click.option(
+    "--outdir",
+    required=True,
+    type=click.Path(),
+    help="Output directory for results.",
+)
+@click.option(
+    "--analysis",
+    multiple=True,
+    default=["res"],
+    type=click.Choice(["res", "sa", "vol", "psd", "chan"]),
+    help="Analysis type. Can be specified multiple times.",
+)
+@click.option(
+    "--probe-radius",
+    default=1.86,
+    help="Probe radius in Angstrom.",
+)
+@click.option(
+    "--chan-radius",
+    default=1.86,
+    help="Channel radius in Angstrom.",
+)
+@click.option(
+    "--num-samples",
+    default=2000,
+    help="Number of Monte Carlo samples.",
+)
+@click.option(
+    "--ha/--no-ha",
+    default=True,
+    help="Use high accuracy mode (-ha). Default: enabled.",
+)
+@click.option(
+    "--radii",
+    default=None,
+    type=click.Path(exists=True),
+    help="Path to atomic radii file. Default: bundled UFF.rad.",
+)
+@click.option(
+    "--network-path",
+    default=None,
+    type=click.Path(),
+    help="Path to Zeo++ network binary.",
+)
+@click.option(
+    "--max-workers",
+    default=None,
+    type=int,
+    help="Max parallel processes. Default: CPU count.",
+)
+def zeopp_run_batch(
+    cif_dir, outdir, analysis, probe_radius,
+    chan_radius, num_samples, ha, radii,
+    network_path, max_workers,
+):
+    """Run Zeo++ on all CIFs in a directory.
+
+    Processes CIF files in parallel and writes results
+    to a consolidated results.jsonl file.
+
+    \b
+    Examples:
+      matkit zeopp run-batch --cif-dir cifs/ --outdir out/
+      matkit zeopp run-batch --cif-dir cifs/ --outdir out/ \\
+          --analysis res --analysis sa --max-workers 32
+    """
+    try:
+        summary = zeopp.run_batch(
+            cif_dir=cif_dir,
+            output_dir=outdir,
+            analyses=list(analysis),
+            probe_radius=probe_radius,
+            chan_radius=chan_radius,
+            num_samples=num_samples,
+            ha=ha,
+            radii_file=radii,
+            network_path=network_path,
+            max_workers=max_workers,
+        )
+        click.echo(f"Results written to {summary}")
+    except Exception as e:
+        click.echo(f"Error in batch run: {e}", err=True)
+
+
 if __name__ == "__main__":
     main()

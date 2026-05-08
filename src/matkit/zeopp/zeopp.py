@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -417,3 +419,134 @@ def run_zeopp(
     finally:
         if use_temp:
             shutil.rmtree(workdir, ignore_errors=True)
+
+
+def _flatten_results(results: dict) -> dict:
+    """Flatten nested analysis results into a flat dict.
+
+    Args:
+        results: The 'results' sub-dict from run_zeopp().
+
+    Returns:
+        Flat dict with all analysis values at the top level.
+    """
+    flat = {}
+    for data in results.values():
+        flat.update(data)
+    return flat
+
+
+def run_batch(
+    cif_dir: str,
+    output_dir: str,
+    analyses: list[str] | None = None,
+    probe_radius: float = 1.86,
+    chan_radius: float = 1.86,
+    num_samples: int = 2000,
+    ha: bool = True,
+    radii_file: str | None = None,
+    network_path: str | None = None,
+    max_workers: int | None = None,
+) -> str:
+    """Run Zeo++ on all CIF files in a directory.
+
+    Processes CIF files in parallel and writes a consolidated
+    results.jsonl (one JSON object per line per structure),
+    matching the gRASPA workflow output format.
+
+    Args:
+        cif_dir: Directory containing CIF files.
+        output_dir: Directory for output files and results.jsonl.
+        analyses: Analysis types to run. Defaults to ['res'].
+        probe_radius: Probe molecule radius in Angstrom.
+        chan_radius: Channel radius in Angstrom.
+        num_samples: Number of Monte Carlo samples.
+        ha: Use high accuracy mode.
+        radii_file: Path to atomic radii file.
+        network_path: Path to the network binary.
+        max_workers: Max parallel processes. Defaults to
+            CPU count.
+
+    Returns:
+        Path to the results.jsonl file.
+
+    Raises:
+        FileNotFoundError: If cif_dir does not exist or
+            contains no CIF files.
+    """
+    cif_path = Path(cif_dir)
+    if not cif_path.exists():
+        raise FileNotFoundError(
+            f"CIF directory does not exist: {cif_dir}"
+        )
+
+    cif_files = sorted(cif_path.glob("*.cif"))
+    if not cif_files:
+        raise FileNotFoundError(
+            f"No CIF files found in: {cif_dir}"
+        )
+
+    out_path = Path(output_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    if analyses is None:
+        analyses = ["res"]
+
+    def _process_one(cif_file: Path) -> dict:
+        stem = cif_file.stem
+        struct_outdir = str(out_path / f"{stem}_zeopp")
+        try:
+            result = run_zeopp(
+                cif=str(cif_file),
+                analyses=analyses,
+                probe_radius=probe_radius,
+                chan_radius=chan_radius,
+                num_samples=num_samples,
+                ha=ha,
+                radii_file=radii_file,
+                network_path=network_path,
+                output_dir=struct_outdir,
+            )
+            record = {
+                "structure": stem,
+                "status": "success",
+            }
+            record.update(
+                _flatten_results(result["results"])
+            )
+            return record
+        except Exception as e:
+            return {
+                "structure": stem,
+                "status": "failure",
+                "error_message": str(e),
+            }
+
+    results = []
+    with ThreadPoolExecutor(max_workers) as pool:
+        futures = {
+            pool.submit(_process_one, cif): cif
+            for cif in cif_files
+        }
+        for fut in futures:
+            results.append(fut.result())
+
+    # Sort by structure name for deterministic output
+    results.sort(key=lambda r: r["structure"])
+
+    summary_path = out_path / "results.jsonl"
+    success = 0
+    with open(summary_path, "w", encoding="utf-8") as f:
+        for rec in results:
+            if rec["status"] == "success":
+                success += 1
+            f.write(json.dumps(rec) + "\n")
+
+    total = len(results)
+    failed = total - success
+    print(
+        f"Zeo++ batch complete: {success} success, "
+        f"{failed} failure out of {total} structures"
+    )
+
+    return str(summary_path)
