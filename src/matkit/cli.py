@@ -49,8 +49,8 @@ def graspa_cli():
 @click.option("--cycles", default=1000, help="Number of cycles.")
 def graspa_setup(cif, outdir, adsorbate, temp, pressure, cutoff, cycles):
     """Setup gRASPA simulation files."""
-    # Convert adsorbates tuple to list of dicts as expected by graspa.setup_simulation
-    # The current graspa.setup_simulation expects a list of dicts with "MoleculeName"
+    # Convert adsorbates tuple to list of dicts
+    # as expected by graspa.setup_simulation
     adsorbate_list = [{"MoleculeName": ads} for ads in adsorbate]
 
     try:
@@ -588,7 +588,7 @@ def zeopp_cli():
     "--radii",
     default=None,
     type=click.Path(exists=True),
-    help="Path to atomic radii file (e.g. UFF.rad).",
+    help="Path to atomic radii file. Default: bundled UFF.rad.",
 )
 @click.option(
     "--network-path",

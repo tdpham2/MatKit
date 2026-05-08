@@ -206,8 +206,8 @@ class TestRunZeopp:
 
     @patch("matkit.zeopp.zeopp._find_network_binary")
     @patch("matkit.zeopp.zeopp.subprocess.run")
-    def test_run_includes_ha_flag(self, mock_run, mock_find, sample_cif,
-                                  tmp_path):
+    def test_run_includes_ha_flag(self, mock_run, mock_find,
+                                  sample_cif, tmp_path):
         """Should include -ha flag by default."""
         mock_find.return_value = "/usr/bin/network"
         mock_run.return_value = MagicMock(returncode=0, stderr="")
@@ -216,6 +216,22 @@ class TestRunZeopp:
                   output_dir=str(tmp_path / "out"))
         cmd = mock_run.call_args[0][0]
         assert "-ha" in cmd
+
+    @patch("matkit.zeopp.zeopp._find_network_binary")
+    @patch("matkit.zeopp.zeopp.subprocess.run")
+    def test_run_uses_bundled_radii_by_default(
+        self, mock_run, mock_find, sample_cif, tmp_path,
+    ):
+        """Should use bundled UFF.rad when no radii file given."""
+        mock_find.return_value = "/usr/bin/network"
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
+
+        outdir = tmp_path / "out"
+        run_zeopp(sample_cif, analyses=["res"],
+                  output_dir=str(outdir))
+        cmd = mock_run.call_args[0][0]
+        assert "-r" in cmd
+        assert (outdir / "UFF.rad").exists()
 
     @patch("matkit.zeopp.zeopp._find_network_binary")
     @patch("matkit.zeopp.zeopp.subprocess.run")

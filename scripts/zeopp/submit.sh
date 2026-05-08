@@ -13,19 +13,11 @@ cd $PBS_O_WORKDIR
 
 # ----- User Configuration ----- #
 CIF_DIR="${CIF_DIR:-.}"
-RADII_FILE="${RADII_FILE:-UFF.rad}"
 NETWORK_BIN="${NETWORK_BIN:-$HOME/soft/zeo++-0.3/network}"
 NUM_SAMPLES="${NUM_SAMPLES:-100000}"
 PROBE_RADIUS="${PROBE_RADIUS:-1.86}"
 CHAN_RADIUS="${CHAN_RADIUS:-1.86}"
 # ------------------------------- #
-
-# Copy radii file to working directory if not already present
-if [ ! -f "$RADII_FILE" ]; then
-    cp ~/scripts/zeo/$RADII_FILE . 2>/dev/null || {
-        echo "Error: radii file $RADII_FILE not found"; exit 1
-    }
-fi
 
 for cif in "${CIF_DIR}"/*.cif; do
     [ -f "$cif" ] || continue
@@ -36,7 +28,6 @@ for cif in "${CIF_DIR}"/*.cif; do
         --cif "$cif" \
         --analysis res \
         --analysis sa \
-        --radii "$RADII_FILE" \
         --network-path "$NETWORK_BIN" \
         --probe-radius "$PROBE_RADIUS" \
         --chan-radius "$CHAN_RADIUS" \

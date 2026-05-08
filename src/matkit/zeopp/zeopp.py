@@ -305,7 +305,8 @@ def run_zeopp(
         num_samples: Number of Monte Carlo samples for sa/vol/psd.
         ha: Use high accuracy (-ha flag). Defaults to True.
         radii_file: Path to atomic radii file (e.g. UFF.rad).
-            Passed via -r flag. If None, Zeo++ uses built-in radii.
+            Passed via -r flag. Defaults to the bundled
+            UFF.rad if None.
         network_path: Explicit path to the network binary.
         output_dir: Directory for output files. Uses a temp directory
             if None.
@@ -323,12 +324,16 @@ def run_zeopp(
     if not cifpath.exists():
         raise FileNotFoundError(f"CIF file does not exist: {cif}")
 
-    if radii_file is not None:
-        radii_path = Path(radii_file)
-        if not radii_path.exists():
-            raise FileNotFoundError(
-                f"Radii file does not exist: {radii_file}"
-            )
+    if radii_file is None:
+        radii_file = str(
+            Path(__file__).parent / "files" / "UFF.rad"
+        )
+
+    radii_path = Path(radii_file)
+    if not radii_path.exists():
+        raise FileNotFoundError(
+            f"Radii file does not exist: {radii_file}"
+        )
 
     if analyses is None:
         analyses = ["res"]
@@ -353,10 +358,9 @@ def run_zeopp(
         cif_dest = workdir / cifpath.name
         shutil.copy(cifpath, cif_dest)
 
-        # Copy radii file to working directory if provided
-        if radii_file is not None:
-            rad_dest = workdir / radii_path.name
-            shutil.copy(radii_path, rad_dest)
+        # Copy radii file to working directory
+        rad_dest = workdir / radii_path.name
+        shutil.copy(radii_path, rad_dest)
 
         # Build command
         cmd = [binary]
@@ -364,24 +368,26 @@ def run_zeopp(
         if ha:
             cmd.append("-ha")
 
-        if radii_file is not None:
-            cmd.extend(["-r", str(rad_dest)])
+        cmd.extend(["-r", str(rad_dest)])
 
         for analysis in analyses:
             if analysis == "res":
                 cmd.extend(["-res"])
             elif analysis == "sa":
-                cmd.extend(
-                    ["-sa", str(probe_radius), str(chan_radius), str(num_samples)]
-                )
+                cmd.extend([
+                    "-sa", str(probe_radius),
+                    str(chan_radius), str(num_samples),
+                ])
             elif analysis == "vol":
-                cmd.extend(
-                    ["-vol", str(probe_radius), str(chan_radius), str(num_samples)]
-                )
+                cmd.extend([
+                    "-vol", str(probe_radius),
+                    str(chan_radius), str(num_samples),
+                ])
             elif analysis == "psd":
-                cmd.extend(
-                    ["-psd", str(probe_radius), str(chan_radius), str(num_samples)]
-                )
+                cmd.extend([
+                    "-psd", str(probe_radius),
+                    str(chan_radius), str(num_samples),
+                ])
             elif analysis == "chan":
                 cmd.extend(["-chan", str(probe_radius)])
         cmd.append(str(cif_dest))
