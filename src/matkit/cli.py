@@ -1,12 +1,5 @@
 import click
 import json
-from matkit.graspa import graspa
-from matkit.raspa2 import raspa2
-from matkit.tobacco import create_linker_from_smiles
-from matkit.zeopp import zeopp
-
-
-from matkit.graspa_sycl import graspa_sycl
 
 
 @click.group()
@@ -49,12 +42,13 @@ def graspa_cli():
 @click.option("--cycles", default=1000, help="Number of cycles.")
 def graspa_setup(cif, outdir, adsorbate, temp, pressure, cutoff, cycles):
     """Setup gRASPA simulation files."""
+    from matkit.graspa import setup_simulation
+
     # Convert adsorbates tuple to list of dicts
-    # as expected by graspa.setup_simulation
     adsorbate_list = [{"MoleculeName": ads} for ads in adsorbate]
 
     try:
-        graspa.setup_simulation(
+        setup_simulation(
             cif=cif,
             outpath=outdir,
             adsorbates=adsorbate_list,
@@ -83,8 +77,10 @@ def graspa_setup(cif, outdir, adsorbate, temp, pressure, cutoff, cycles):
 )
 def graspa_analyze(path, unit):
     """Analyze gRASPA simulation results."""
+    from matkit.graspa import get_output_data
+
     try:
-        result = graspa.get_output_data(path, unit=unit)
+        result = get_output_data(path, unit=unit)
         click.echo(json.dumps(result, indent=2))
     except Exception as e:
         click.echo(f"Error analyzing gRASPA results: {e}", err=True)
@@ -119,8 +115,10 @@ def graspa_sycl_cli():
 @click.option("--cycles", default=1000, help="Number of cycles.")
 def graspa_sycl_setup(cif, outdir, adsorbate, temp, pressure, cutoff, cycles):
     """Setup gRASPA SYCL simulation files."""
+    from matkit.graspa_sycl import setup_simulation
+
     try:
-        graspa_sycl.setup_simulation(
+        setup_simulation(
             cif=cif,
             outpath=outdir,
             adsorbate=adsorbate,
@@ -155,8 +153,10 @@ def graspa_sycl_setup(cif, outdir, adsorbate, temp, pressure, cutoff, cycles):
 @click.option("--fname", default="raspa.log", help="Output filename.")
 def graspa_sycl_analyze(path, unit, adsorbate, fname):
     """Analyze gRASPA SYCL simulation results."""
+    from matkit.graspa_sycl import get_output_data
+
     try:
-        result = graspa_sycl.get_output_data(
+        result = get_output_data(
             output_path=path, unit=unit, adsorbate=adsorbate, output_fname=fname
         )
         click.echo(json.dumps(result, indent=2))
@@ -194,9 +194,10 @@ def raspa2_cli():
 @click.option("--cycles", default=1000, help="Number of cycles.")
 def raspa2_setup(cif, outdir, adsorbate, temp, pressure, cutoff, cycles):
     """Setup RASPA2 simulation files."""
+    from matkit.raspa2 import setup_input_simulation
+
     try:
-        # raspa2.setup_input_simulation takes a list of cifs
-        raspa2.setup_input_simulation(
+        setup_input_simulation(
             cifs=list(cif),
             outpath=outdir,
             adsorbate=adsorbate,
@@ -225,8 +226,10 @@ def raspa2_setup(cif, outdir, adsorbate, temp, pressure, cutoff, cycles):
 )
 def raspa2_analyze(path, unit):
     """Analyze RASPA2 simulation results."""
+    from matkit.raspa2 import get_output_data
+
     try:
-        result = raspa2.get_output_data(path, unit=unit)
+        result = get_output_data(path, unit=unit)
         click.echo(json.dumps(result, indent=2))
     except Exception as e:
         click.echo(f"Error analyzing RASPA2 results: {e}", err=True)
@@ -252,8 +255,10 @@ def tobacco_cli():
 @click.option("--out", default="final_output.cif", help="Output CIF filename.")
 def tobacco_create(smiles, site, out):
     """Create a linker CIF from SMILES."""
+    from matkit.tobacco import create_linker
+
     try:
-        create_linker_from_smiles.create_linker(
+        create_linker(
             smiles=smiles, connection_sites=list(site), output_cif=out
         )
     except Exception as e:
@@ -542,6 +547,476 @@ def plot_selectivity_cmd(
 
 
 # ==========================================
+# MLIP COMMANDS
+# ==========================================
+@main.group("mlip")
+def mlip_cli():
+    """Commands for ML interatomic potential calculations."""
+    pass
+
+
+@mlip_cli.command("mace-opt")
+@click.option(
+    "--fname",
+    required=True,
+    type=click.Path(exists=True),
+    help="Input structure file (CIF, XYZ, POSCAR, etc.).",
+)
+@click.option(
+    "--run-type",
+    default="geo_opt",
+    type=click.Choice(
+        ["geo_opt", "cell_opt", "geo_opt_cell_opt"]
+    ),
+    help="Optimization type.",
+)
+@click.option(
+    "--steps", default=1000, help="Max optimization steps."
+)
+@click.option(
+    "--fmax",
+    default=1e-3,
+    help="Force convergence criterion (eV/A).",
+)
+@click.option(
+    "--model",
+    default="medium",
+    type=click.Choice(["small", "medium", "large"]),
+    help="MACE-MP model size.",
+)
+@click.option(
+    "--device",
+    default="cpu",
+    type=click.Choice(["cpu", "cuda"]),
+    help="Compute device.",
+)
+@click.option(
+    "--dispersion/--no-dispersion",
+    default=True,
+    help="Include D3 dispersion corrections.",
+)
+@click.option(
+    "--default-dtype",
+    default="float64",
+    type=click.Choice(["float32", "float64"]),
+    help="Floating point precision.",
+)
+@click.option(
+    "--write-traj",
+    is_flag=True,
+    help="Write ASE trajectory files.",
+)
+@click.option(
+    "--output",
+    default=None,
+    type=click.Path(),
+    help="Output filename (auto-generated if omitted).",
+)
+def mace_opt_cmd(
+    fname,
+    run_type,
+    steps,
+    fmax,
+    model,
+    device,
+    dispersion,
+    default_dtype,
+    write_traj,
+    output,
+):
+    """Run MACE-MP geometry/cell optimization."""
+    try:
+        from matkit.mlip import run_opt_mace
+
+        run_opt_mace(
+            fname=fname,
+            run_type=run_type,
+            steps=steps,
+            fmax=fmax,
+            model=model,
+            device=device,
+            dispersion=dispersion,
+            default_dtype=default_dtype,
+            write_traj=write_traj,
+            output_fname=output,
+        )
+        click.echo("MACE-MP optimization complete.")
+    except ImportError:
+        click.echo(
+            "Error: mace-torch required. "
+            "Install with: pip install matkit[mlip]",
+            err=True,
+        )
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+
+
+@mlip_cli.command("uma-opt")
+@click.option(
+    "--fname",
+    required=True,
+    type=click.Path(exists=True),
+    help="Input structure file.",
+)
+@click.option(
+    "--run-type",
+    default="geo_opt",
+    type=click.Choice(
+        ["geo_opt", "cell_opt", "geo_opt_cell_opt"]
+    ),
+    help="Optimization type.",
+)
+@click.option(
+    "--steps", default=1000, help="Max optimization steps."
+)
+@click.option(
+    "--fmax",
+    default=1e-3,
+    help="Force convergence criterion (eV/A).",
+)
+@click.option(
+    "--model",
+    default="uma-s-1p2",
+    help="UMA model name (e.g. uma-s-1p2, uma-m-1p1).",
+)
+@click.option(
+    "--task-name",
+    default="omat",
+    type=click.Choice(
+        ["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]
+    ),
+    help="Task head for domain-specific prediction.",
+)
+@click.option(
+    "--device",
+    default="cpu",
+    type=click.Choice(["cpu", "cuda"]),
+    help="Compute device.",
+)
+@click.option(
+    "--write-traj",
+    is_flag=True,
+    help="Write ASE trajectory files.",
+)
+@click.option(
+    "--output",
+    default=None,
+    type=click.Path(),
+    help="Output filename (auto-generated if omitted).",
+)
+def uma_opt_cmd(
+    fname,
+    run_type,
+    steps,
+    fmax,
+    model,
+    task_name,
+    device,
+    write_traj,
+    output,
+):
+    """Run UMA geometry/cell optimization."""
+    try:
+        from matkit.mlip.uma import run_opt_uma
+
+        run_opt_uma(
+            fname=fname,
+            run_type=run_type,
+            steps=steps,
+            fmax=fmax,
+            model=model,
+            task_name=task_name,
+            device=device,
+            write_traj=write_traj,
+            output_fname=output,
+        )
+        click.echo("UMA optimization complete.")
+    except ImportError:
+        click.echo(
+            "Error: fairchem-core required. "
+            "Install with: pip install matkit[uma]",
+            err=True,
+        )
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+
+
+@mlip_cli.command("uma-sp")
+@click.option(
+    "--fname",
+    required=True,
+    type=click.Path(exists=True),
+    help="Input structure file.",
+)
+@click.option(
+    "--model",
+    default="uma-s-1p2",
+    help="UMA model name.",
+)
+@click.option(
+    "--task-name",
+    default="omat",
+    type=click.Choice(
+        ["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]
+    ),
+    help="Task head for domain-specific prediction.",
+)
+@click.option(
+    "--device",
+    default="cpu",
+    type=click.Choice(["cpu", "cuda"]),
+    help="Compute device.",
+)
+def uma_sp_cmd(fname, model, task_name, device):
+    """Run UMA single-point energy calculation."""
+    try:
+        from matkit.mlip.uma import run_sp_uma
+
+        result = run_sp_uma(
+            fname=fname,
+            model=model,
+            task_name=task_name,
+            device=device,
+        )
+        click.echo(json.dumps(result, indent=2))
+    except ImportError:
+        click.echo(
+            "Error: fairchem-core required. "
+            "Install with: pip install matkit[uma]",
+            err=True,
+        )
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+
+
+@mlip_cli.command("uma-md")
+@click.option(
+    "--fname",
+    required=True,
+    type=click.Path(exists=True),
+    help="Input structure file.",
+)
+@click.option(
+    "--model",
+    default="uma-s-1p2",
+    help="UMA model name.",
+)
+@click.option(
+    "--task-name",
+    default="omat",
+    type=click.Choice(
+        ["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]
+    ),
+    help="Task head for domain-specific prediction.",
+)
+@click.option(
+    "--device",
+    default="cpu",
+    type=click.Choice(["cpu", "cuda"]),
+    help="Compute device.",
+)
+@click.option(
+    "--temperature",
+    default=300.0,
+    help="Target temperature in Kelvin.",
+)
+@click.option(
+    "--timestep",
+    default=1.0,
+    help="MD timestep in femtoseconds.",
+)
+@click.option(
+    "--steps", default=1000, help="Number of MD steps."
+)
+@click.option(
+    "--ensemble",
+    default="nvt",
+    type=click.Choice(["nve", "nvt"]),
+    help="MD ensemble.",
+)
+@click.option(
+    "--friction",
+    default=0.01,
+    help="Langevin friction coefficient (NVT only).",
+)
+@click.option(
+    "--write-traj",
+    is_flag=True,
+    help="Write ASE trajectory file.",
+)
+@click.option(
+    "--output",
+    default=None,
+    type=click.Path(),
+    help="Output filename (auto-generated if omitted).",
+)
+@click.option(
+    "--log-interval",
+    default=10,
+    help="Steps between log entries.",
+)
+def uma_md_cmd(
+    fname,
+    model,
+    task_name,
+    device,
+    temperature,
+    timestep,
+    steps,
+    ensemble,
+    friction,
+    write_traj,
+    output,
+    log_interval,
+):
+    """Run UMA molecular dynamics."""
+    try:
+        from matkit.mlip.uma import run_md_uma
+
+        run_md_uma(
+            fname=fname,
+            model=model,
+            task_name=task_name,
+            device=device,
+            temperature=temperature,
+            timestep=timestep,
+            steps=steps,
+            ensemble=ensemble,
+            friction=friction,
+            write_traj=write_traj,
+            output_fname=output,
+            log_interval=log_interval,
+        )
+        click.echo("UMA MD complete.")
+    except ImportError:
+        click.echo(
+            "Error: fairchem-core required. "
+            "Install with: pip install matkit[uma]",
+            err=True,
+        )
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+
+
+@mlip_cli.command("uma-opt-batch")
+@click.option(
+    "--input",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True),
+    help="Input CIF file or directory of CIF files.",
+)
+@click.option(
+    "--outdir",
+    required=True,
+    type=click.Path(),
+    help="Output directory for CIFs and results.jsonl.",
+)
+@click.option(
+    "--model",
+    "models",
+    multiple=True,
+    default=["uma-s-1p2"],
+    help="UMA model name(s). Can be specified multiple times.",
+)
+@click.option(
+    "--run-type",
+    "run_types",
+    multiple=True,
+    default=["geo_opt"],
+    type=click.Choice(
+        ["geo_opt", "cell_opt", "geo_opt_cell_opt"]
+    ),
+    help="Optimization type(s). Can be specified multiple times.",
+)
+@click.option(
+    "--task-name",
+    default="omat",
+    type=click.Choice(
+        ["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]
+    ),
+    help="Task head for domain-specific prediction.",
+)
+@click.option(
+    "--steps", default=1000, help="Max optimization steps."
+)
+@click.option(
+    "--fmax",
+    default=1e-3,
+    help="Force convergence criterion (eV/A) for geometry.",
+)
+@click.option(
+    "--fmax-cell",
+    default=None,
+    type=float,
+    help="Force convergence for cell opt. Defaults to --fmax.",
+)
+@click.option(
+    "--num-gpus",
+    default=None,
+    type=int,
+    help="Number of GPUs. Auto-detected if omitted.",
+)
+@click.option(
+    "--device",
+    default="cuda",
+    type=click.Choice(["cpu", "cuda"]),
+    help="Compute device.",
+)
+@click.option(
+    "--write-traj",
+    is_flag=True,
+    help="Write ASE trajectory files.",
+)
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    help="Overwrite existing output files.",
+)
+def uma_opt_batch_cmd(
+    input_path,
+    outdir,
+    models,
+    run_types,
+    task_name,
+    steps,
+    fmax,
+    fmax_cell,
+    num_gpus,
+    device,
+    write_traj,
+    overwrite,
+):
+    """Run UMA optimization in batch across multiple GPUs."""
+    try:
+        from matkit.mlip.uma import run_opt_uma_batch
+
+        result_path = run_opt_uma_batch(
+            input_path=input_path,
+            output_dir=outdir,
+            models=list(models),
+            run_types=list(run_types),
+            task_name=task_name,
+            steps=steps,
+            fmax=fmax,
+            fmax_cell=fmax_cell,
+            num_gpus=num_gpus,
+            device=device,
+            write_traj=write_traj,
+            overwrite=overwrite,
+        )
+        click.echo(f"Results written to: {result_path}")
+    except ImportError:
+        click.echo(
+            "Error: fairchem-core required. "
+            "Install with: pip install matkit[uma]",
+            err=True,
+        )
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+
+
+# ==========================================
 # ZEOPP COMMANDS
 # ==========================================
 @main.group("zeopp")
@@ -605,8 +1080,10 @@ def zeopp_cli():
 def zeopp_run(cif, analysis, probe_radius, chan_radius, num_samples,
               ha, radii, network_path, outdir):
     """Run Zeo++ analysis on a CIF structure."""
+    from matkit.zeopp import run_zeopp
+
     try:
-        result = zeopp.run_zeopp(
+        result = run_zeopp(
             cif=cif,
             analyses=list(analysis),
             probe_radius=probe_radius,
@@ -637,9 +1114,11 @@ def zeopp_run(cif, analysis, probe_radius, chan_radius, num_samples,
 )
 def zeopp_analyze(path, analysis):
     """Parse existing Zeo++ output files."""
+    from matkit.zeopp import get_output_data
+
     try:
         analyses = list(analysis) if analysis else None
-        result = zeopp.get_output_data(path, analyses=analyses)
+        result = get_output_data(path, analyses=analyses)
         click.echo(json.dumps(result, indent=2))
     except Exception as e:
         click.echo(f"Error analyzing Zeo++ results: {e}", err=True)
@@ -719,8 +1198,10 @@ def zeopp_run_batch(
       matkit zeopp run-batch --cif-dir cifs/ --outdir out/ \\
           --analysis res --analysis sa --max-workers 32
     """
+    from matkit.zeopp import run_batch
+
     try:
-        summary = zeopp.run_batch(
+        summary = run_batch(
             cif_dir=cif_dir,
             output_dir=outdir,
             analyses=list(analysis),
