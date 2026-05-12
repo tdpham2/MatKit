@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+
+from matkit.types import ZeoppResult
 
 
 VALID_ANALYSES = {"res", "sa", "vol", "psd", "chan"}
@@ -291,7 +295,7 @@ def run_zeopp(
     radii_file: str | None = None,
     network_path: str | None = None,
     output_dir: str | None = None,
-) -> dict:
+) -> ZeoppResult:
     """Run Zeo++ network binary on a CIF structure file.
 
     Builds a single command combining all requested analysis flags
