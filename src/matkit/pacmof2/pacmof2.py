@@ -50,9 +50,7 @@ def run_charge_prediction(
     if multiple_cifs:
         n = len(list(cif_path.glob("*.cif")))
         if n == 0:
-            raise FileNotFoundError(
-                f"No .cif files found in {cif_path}"
-            )
+            raise FileNotFoundError(f"No .cif files found in {cif_path}")
     else:
         n = 1
 

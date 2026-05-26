@@ -1125,9 +1125,7 @@ def pacmof2_predict(
         )
         return
     if not cif and not cif_dir:
-        click.echo(
-            "Error: provide --cif or --cif-dir.", err=True
-        )
+        click.echo("Error: provide --cif or --cif-dir.", err=True)
         return
 
     cif_path = cif_dir if cif_dir else cif
