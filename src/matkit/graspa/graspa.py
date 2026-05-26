@@ -1,6 +1,11 @@
+from __future__ import annotations
+
+import json
+from itertools import product
 from pathlib import Path
 import shutil
 from matkit.utils.unitcell_calculator import calculate_cell_size
+from matkit.types import GRASPAResult
 from ase.io import read as ase_read
 
 
@@ -9,7 +14,7 @@ def get_output_data(
     unit: str = "mol/kg",
     output_fname: str = "raspa.log",
     eos: bool = False,
-) -> dict:
+) -> GRASPAResult:
     """Parse gRASPA simulation output and extract uptake data.
 
     Args:
@@ -229,3 +234,76 @@ def setup_simulation(
         f.write(template)
 
     return True
+
+
+def setup_batch(
+    cif_dir: str,
+    outpath: str,
+    adsorbates: list[dict],
+    temperatures: list[float],
+    pressures: list[float],
+    cutoff: float = 12.8,
+    n_cycle: int = 1000,
+    template_dir: str = "template",
+) -> list[dict]:
+    """Set up gRASPA simulations for all CIF x temperature x pressure combinations.
+
+    Discovers all .cif files in cif_dir and creates a simulation directory
+    for each (CIF, temperature, pressure) combination using setup_simulation().
+    Writes a simulations.jsonl manifest to outpath.
+
+    Args:
+        cif_dir: Directory containing input CIF files.
+        outpath: Base output directory for all simulation directories.
+        adsorbates: List of adsorbate dicts with 'MoleculeName' key.
+        temperatures: List of simulation temperatures in Kelvin.
+        pressures: List of simulation pressures in Pascals.
+        cutoff: Van der Waals cutoff radius in Angstrom.
+        n_cycle: Number of Monte Carlo cycles.
+        template_dir: Template subdirectory name under files/.
+
+    Returns:
+        List of manifest dicts, each with keys: sim_dir, cif,
+        temperature, pressure, adsorbates.
+
+    Raises:
+        ValueError: If cif_dir does not exist or contains no .cif files.
+    """
+    cif_path = Path(cif_dir)
+    out_path = Path(outpath)
+
+    if not cif_path.is_dir():
+        raise ValueError(f"CIF directory does not exist: {cif_dir}")
+
+    cif_files = sorted(cif_path.glob("*.cif"))
+    if not cif_files:
+        raise ValueError(f"No .cif files found in {cif_dir}")
+
+    manifest = []
+    for cif, temp, pres in product(cif_files, temperatures, pressures):
+        sim_dir = out_path / cif.stem / f"T{temp}_P{pres:g}"
+        setup_simulation(
+            cif=str(cif),
+            outpath=str(sim_dir),
+            adsorbates=adsorbates,
+            temperature=temp,
+            pressure=pres,
+            cutoff=cutoff,
+            n_cycle=n_cycle,
+            template_dir=template_dir,
+        )
+        entry = {
+            "sim_dir": str(sim_dir),
+            "cif": cif.name,
+            "temperature": temp,
+            "pressure": pres,
+            "adsorbates": [ad["MoleculeName"] for ad in adsorbates],
+        }
+        manifest.append(entry)
+
+    manifest_path = out_path / "simulations.jsonl"
+    with manifest_path.open("w") as f:
+        for entry in manifest:
+            f.write(json.dumps(entry) + "\n")
+
+    return manifest

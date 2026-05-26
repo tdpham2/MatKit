@@ -62,6 +62,65 @@ def graspa_setup(cif, outdir, adsorbate, temp, pressure, cutoff, cycles):
         click.echo(f"Error setting up gRASPA simulation: {e}", err=True)
 
 
+@graspa_cli.command("batch-setup")
+@click.option(
+    "--cif-dir",
+    required=True,
+    type=click.Path(exists=True, file_okay=False),
+    help="Directory containing CIF files.",
+)
+@click.option(
+    "--outdir",
+    required=True,
+    type=click.Path(),
+    help="Base output directory for simulation files.",
+)
+@click.option(
+    "--adsorbate",
+    required=True,
+    multiple=True,
+    help="Adsorbate molecule name (e.g. CO2). Can be specified multiple times.",
+)
+@click.option(
+    "--temp",
+    required=True,
+    multiple=True,
+    type=float,
+    help="Temperature in Kelvin. Can be specified multiple times.",
+)
+@click.option(
+    "--pressure",
+    required=True,
+    multiple=True,
+    type=float,
+    help="Pressure in Pa. Can be specified multiple times.",
+)
+@click.option("--cutoff", default=12.8, help="Cutoff radius in Angstrom.")
+@click.option("--cycles", default=1000, help="Number of MC cycles.")
+def graspa_batch_setup(cif_dir, outdir, adsorbate, temp, pressure, cutoff, cycles):
+    """Set up gRASPA simulations for all CIF x temperature x pressure combinations."""
+    from matkit.graspa import setup_batch
+
+    adsorbate_list = [{"MoleculeName": ads} for ads in adsorbate]
+
+    try:
+        manifest = setup_batch(
+            cif_dir=cif_dir,
+            outpath=outdir,
+            adsorbates=adsorbate_list,
+            temperatures=list(temp),
+            pressures=list(pressure),
+            cutoff=cutoff,
+            n_cycle=cycles,
+        )
+        click.echo(
+            f"Set up {len(manifest)} simulations in {outdir}"
+        )
+        click.echo(f"Manifest written to {outdir}/simulations.jsonl")
+    except Exception as e:
+        click.echo(f"Error setting up batch simulations: {e}", err=True)
+
+
 @graspa_cli.command("analyze")
 @click.option(
     "--path",
