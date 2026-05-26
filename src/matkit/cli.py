@@ -97,8 +97,14 @@ def graspa_setup(cif, outdir, adsorbate, temp, pressure, cutoff, cycles):
 )
 @click.option("--cutoff", default=12.8, help="Cutoff radius in Angstrom.")
 @click.option("--cycles", default=1000, help="Number of MC cycles.")
+@click.option(
+    "--workers",
+    default=None,
+    type=int,
+    help="Max parallel threads for CIF processing.",
+)
 def graspa_batch_setup(
-    cif_dir, outdir, adsorbate, temp, pressure, cutoff, cycles
+    cif_dir, outdir, adsorbate, temp, pressure, cutoff, cycles, workers
 ):
     """Set up gRASPA simulations for all CIF x T x P."""
     from matkit.graspa import setup_batch
@@ -114,6 +120,7 @@ def graspa_batch_setup(
             pressures=list(pressure),
             cutoff=cutoff,
             n_cycle=cycles,
+            max_workers=workers,
         )
         click.echo(f"Set up {len(manifest)} simulations in {outdir}")
         click.echo(f"Manifest written to {outdir}/simulations.jsonl")
