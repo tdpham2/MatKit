@@ -269,10 +269,7 @@ def smiles_to_cif(smiles, output_prefix="L1"):
             d = struct.get_distance(i, j, mic=True)
             jlabel = f"{struct[j].symbol}{j + 1}"
             dist = round(d, 4)
-            bond_block += (
-                f"{label:<6}{jlabel:<6}"
-                f"{dist:<8}.     S\n"
-            )
+            bond_block += f"{label:<6}{jlabel:<6}{dist:<8}.     S\n"
 
     with open(final_cif, "w", encoding="utf-8") as f:
         f.write(
