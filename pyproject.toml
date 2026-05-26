@@ -19,7 +19,8 @@ dependencies = [
 rdkit = ["rdkit"]
 mlip = ["mace-torch"]
 plot = ["matplotlib>=3.5"]
-all = ["rdkit", "mace-torch", "matplotlib>=3.5"]
+pacmof2 = ["pacmof2"]
+all = ["rdkit", "mace-torch", "matplotlib>=3.5", "pacmof2"]
 dev = ["pytest>=7.0", "ruff>=0.4"]
 
 [project.scripts]

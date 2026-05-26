@@ -51,6 +51,15 @@ class ZeoppResult(TypedDict):
     error: Optional[str]
 
 
+class PACMOF2Result(TypedDict):
+    """Return type for ``matkit.pacmof2.run_charge_prediction``."""
+
+    success: bool
+    output_dir: str
+    num_structures: int
+    error: Optional[str]
+
+
 class UMABatchResult(TypedDict):
     """Record type for ``matkit.mlip.run_opt_uma_batch`` results."""
 
