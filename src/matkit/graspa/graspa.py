@@ -246,7 +246,7 @@ def setup_batch(
     n_cycle: int = 1000,
     template_dir: str = "template",
 ) -> list[dict]:
-    """Set up gRASPA simulations for all CIF x temperature x pressure combinations.
+    """Set up gRASPA simulations for all CIF x T x P.
 
     Discovers all .cif files in cif_dir and creates a simulation directory
     for each (CIF, temperature, pressure) combination using setup_simulation().

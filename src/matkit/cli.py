@@ -97,8 +97,10 @@ def graspa_setup(cif, outdir, adsorbate, temp, pressure, cutoff, cycles):
 )
 @click.option("--cutoff", default=12.8, help="Cutoff radius in Angstrom.")
 @click.option("--cycles", default=1000, help="Number of MC cycles.")
-def graspa_batch_setup(cif_dir, outdir, adsorbate, temp, pressure, cutoff, cycles):
-    """Set up gRASPA simulations for all CIF x temperature x pressure combinations."""
+def graspa_batch_setup(
+    cif_dir, outdir, adsorbate, temp, pressure, cutoff, cycles
+):
+    """Set up gRASPA simulations for all CIF x T x P."""
     from matkit.graspa import setup_batch
 
     adsorbate_list = [{"MoleculeName": ads} for ads in adsorbate]
