@@ -44,9 +44,11 @@ def main():
     print(f"CIF dir: {cfg['cif_dir']}")
     print(f"Adsorbates: {cfg['adsorbates']}")
     print(f"Temperatures: {cfg['temperatures']}")
-    print(f"Pressures: {len(pressures_pa)} points "
-          f"({cfg['pressures'][0]}-{cfg['pressures'][-1]} "
-          f"{cfg.get('pressure_unit', 'Pa')})")
+    print(
+        f"Pressures: {len(pressures_pa)} points "
+        f"({cfg['pressures'][0]}-{cfg['pressures'][-1]} "
+        f"{cfg.get('pressure_unit', 'Pa')})"
+    )
 
     manifest = setup_batch(
         cif_dir=cfg["cif_dir"],
@@ -56,6 +58,7 @@ def main():
         pressures=pressures_pa,
         cutoff=cfg.get("cutoff", 12.8),
         n_cycle=cfg.get("cycles", 1000),
+        max_workers=cfg.get("max_workers"),
     )
 
     print(f"\nSet up {len(manifest)} simulations in {cfg['outdir']}")

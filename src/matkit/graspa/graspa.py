@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from itertools import product
 from pathlib import Path
 import shutil
@@ -163,6 +164,7 @@ def setup_simulation(
     cutoff: float = 12.8,
     n_cycle: int = 1000,
     template_dir: str = "template",
+    cell_size: list[int] | None = None,
 ) -> bool:
     """Set up a gRASPA GCMC simulation.
 
@@ -179,6 +181,8 @@ def setup_simulation(
         cutoff: Van der Waals cutoff radius in Angstrom.
         n_cycle: Number of Monte Carlo cycles.
         template_dir: Template subdirectory name under files/.
+        cell_size: Pre-computed unit cell dimensions [uc_x, uc_y, uc_z].
+            If provided, skips reading the CIF to calculate cell size.
 
     Returns:
         True on success.
@@ -203,9 +207,12 @@ def setup_simulation(
         else:
             shutil.copy2(item, outdir)
 
-    # Read CIF to get cell size
-    atoms = ase_read(cifpath)
-    uc_x, uc_y, uc_z = calculate_cell_size(atoms)
+    # Use pre-computed cell size or read CIF
+    if cell_size is not None:
+        uc_x, uc_y, uc_z = cell_size
+    else:
+        atoms = ase_read(cifpath)
+        uc_x, uc_y, uc_z = calculate_cell_size(atoms)
 
     # Read template and replace placeholders
     input_path = outdir / "simulation.input"
@@ -236,6 +243,50 @@ def setup_simulation(
     return True
 
 
+def _setup_single_cif(
+    cif: Path,
+    out_path: Path,
+    adsorbates: list[dict],
+    temperatures: list[float],
+    pressures: list[float],
+    cutoff: float,
+    n_cycle: int,
+    template_dir: str,
+) -> list[dict]:
+    """Set up all T x P simulations for a single CIF file.
+
+    Reads the CIF once to compute cell size, then creates a simulation
+    directory for each (temperature, pressure) combination.
+    """
+    atoms = ase_read(cif)
+    cell_size = calculate_cell_size(atoms)
+
+    entries = []
+    for temp, pres in product(temperatures, pressures):
+        sim_dir = out_path / cif.stem / f"T{temp}_P{pres:g}"
+        setup_simulation(
+            cif=str(cif),
+            outpath=str(sim_dir),
+            adsorbates=adsorbates,
+            temperature=temp,
+            pressure=pres,
+            cutoff=cutoff,
+            n_cycle=n_cycle,
+            template_dir=template_dir,
+            cell_size=cell_size,
+        )
+        entries.append(
+            {
+                "sim_dir": str(sim_dir),
+                "cif": cif.name,
+                "temperature": temp,
+                "pressure": pres,
+                "adsorbates": [ad["MoleculeName"] for ad in adsorbates],
+            }
+        )
+    return entries
+
+
 def setup_batch(
     cif_dir: str,
     outpath: str,
@@ -245,11 +296,15 @@ def setup_batch(
     cutoff: float = 12.8,
     n_cycle: int = 1000,
     template_dir: str = "template",
+    max_workers: int | None = None,
 ) -> list[dict]:
     """Set up gRASPA simulations for all CIF x T x P.
 
     Discovers all .cif files in cif_dir and creates a simulation directory
-    for each (CIF, temperature, pressure) combination using setup_simulation().
+    for each (CIF, temperature, pressure) combination. Each CIF is read
+    once to compute cell size, then all T x P combinations reuse the
+    cached result. CIFs are processed in parallel using threads.
+
     Writes a simulations.jsonl manifest to outpath.
 
     Args:
@@ -261,6 +316,8 @@ def setup_batch(
         cutoff: Van der Waals cutoff radius in Angstrom.
         n_cycle: Number of Monte Carlo cycles.
         template_dir: Template subdirectory name under files/.
+        max_workers: Max threads for parallel CIF processing.
+            Defaults to None (lets ThreadPoolExecutor choose).
 
     Returns:
         List of manifest dicts, each with keys: sim_dir, cif,
@@ -280,26 +337,23 @@ def setup_batch(
         raise ValueError(f"No .cif files found in {cif_dir}")
 
     manifest = []
-    for cif, temp, pres in product(cif_files, temperatures, pressures):
-        sim_dir = out_path / cif.stem / f"T{temp}_P{pres:g}"
-        setup_simulation(
-            cif=str(cif),
-            outpath=str(sim_dir),
-            adsorbates=adsorbates,
-            temperature=temp,
-            pressure=pres,
-            cutoff=cutoff,
-            n_cycle=n_cycle,
-            template_dir=template_dir,
-        )
-        entry = {
-            "sim_dir": str(sim_dir),
-            "cif": cif.name,
-            "temperature": temp,
-            "pressure": pres,
-            "adsorbates": [ad["MoleculeName"] for ad in adsorbates],
-        }
-        manifest.append(entry)
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = [
+            pool.submit(
+                _setup_single_cif,
+                cif,
+                out_path,
+                adsorbates,
+                temperatures,
+                pressures,
+                cutoff,
+                n_cycle,
+                template_dir,
+            )
+            for cif in cif_files
+        ]
+        for future in futures:
+            manifest.extend(future.result())
 
     manifest_path = out_path / "simulations.jsonl"
     with manifest_path.open("w") as f:

@@ -40,3 +40,4 @@ pressure_unit: bar  # bar, kPa, atm, or Pa
 
 cutoff: 12.8
 cycles: 1000
+max_workers: 4  # parallel threads for CIF processing (null = auto)
