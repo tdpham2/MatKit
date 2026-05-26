@@ -3,6 +3,7 @@ from pathlib import Path
 from ase.io import read as ase_read
 from ase.io import write as ase_write
 from ase.optimize import BFGS
+
 try:
     from ase.filters import ExpCellFilter
 except ImportError:
@@ -33,9 +34,7 @@ def _create_calculator(
     """
     from fairchem.core import pretrained_mlip, FAIRChemCalculator
 
-    predictor = pretrained_mlip.get_predict_unit(
-        model, device=device
-    )
+    predictor = pretrained_mlip.get_predict_unit(model, device=device)
     return FAIRChemCalculator(predictor, task_name=task_name)
 
 
@@ -85,21 +84,13 @@ def _run_opt_uma_with_calc(
         converged = dyn.run(fmax=fmax_cell, steps=steps)
         total_steps = dyn.nsteps
     elif run_type == "geo_opt_cell_opt":
-        traj1 = (
-            f"{traj_prefix}_geo_opt.traj"
-            if write_traj
-            else None
-        )
+        traj1 = f"{traj_prefix}_geo_opt.traj" if write_traj else None
         dyn1 = BFGS(atoms, trajectory=traj1)
         dyn1.run(fmax=fmax, steps=steps)
         total_steps += dyn1.nsteps
 
         ecf = ExpCellFilter(atoms)
-        traj2 = (
-            f"{traj_prefix}_cell_opt.traj"
-            if write_traj
-            else None
-        )
+        traj2 = f"{traj_prefix}_cell_opt.traj" if write_traj else None
         dyn2 = BFGS(ecf, trajectory=traj2)
         converged = dyn2.run(fmax=fmax_cell, steps=steps)
         total_steps += dyn2.nsteps
@@ -264,8 +255,7 @@ def run_md_uma(
         )
     else:
         raise ValueError(
-            f"ensemble '{ensemble}' is not supported. "
-            "Options: 'nve', 'nvt'."
+            f"ensemble '{ensemble}' is not supported. Options: 'nve', 'nvt'."
         )
 
     dyn.run(steps=steps)
@@ -312,18 +302,20 @@ def _gpu_worker(
         output_cif = outdir / f"{tag}.cif"
 
         if output_cif.exists() and not overwrite:
-            result_queue.put({
-                "structure": stem,
-                "model": model,
-                "run_type": run_type,
-                "task_name": task_name,
-                "status": "skipped",
-                "output_file": str(output_cif),
-                "converged": None,
-                "final_energy": None,
-                "n_steps": None,
-                "error_message": None,
-            })
+            result_queue.put(
+                {
+                    "structure": stem,
+                    "model": model,
+                    "run_type": run_type,
+                    "task_name": task_name,
+                    "status": "skipped",
+                    "output_file": str(output_cif),
+                    "converged": None,
+                    "final_energy": None,
+                    "n_steps": None,
+                    "error_message": None,
+                }
+            )
             continue
 
         try:
@@ -355,36 +347,40 @@ def _gpu_worker(
 
             ase_write(str(output_cif), atoms)
 
-            result_queue.put({
-                "structure": stem,
-                "model": model,
-                "run_type": run_type,
-                "task_name": task_name,
-                "status": "success",
-                "output_file": str(output_cif),
-                "converged": result["converged"],
-                "final_energy": result["final_energy"],
-                "n_steps": result["n_steps"],
-                "error_message": None,
-            })
+            result_queue.put(
+                {
+                    "structure": stem,
+                    "model": model,
+                    "run_type": run_type,
+                    "task_name": task_name,
+                    "status": "success",
+                    "output_file": str(output_cif),
+                    "converged": result["converged"],
+                    "final_energy": result["final_energy"],
+                    "n_steps": result["n_steps"],
+                    "error_message": None,
+                }
+            )
             print(
                 f"[GPU {gpu_id}] Done: {tag} "
                 f"(E={result['final_energy']:.4f}, "
                 f"converged={result['converged']})"
             )
         except Exception as e:
-            result_queue.put({
-                "structure": stem,
-                "model": model,
-                "run_type": run_type,
-                "task_name": task_name,
-                "status": "failure",
-                "output_file": None,
-                "converged": None,
-                "final_energy": None,
-                "n_steps": None,
-                "error_message": str(e),
-            })
+            result_queue.put(
+                {
+                    "structure": stem,
+                    "model": model,
+                    "run_type": run_type,
+                    "task_name": task_name,
+                    "status": "failure",
+                    "output_file": None,
+                    "converged": None,
+                    "final_energy": None,
+                    "n_steps": None,
+                    "error_message": str(e),
+                }
+            )
             print(f"[GPU {gpu_id}] ERROR: {tag}: {e}")
 
 
@@ -441,19 +437,13 @@ def run_opt_uma_batch(
 
     input_p = Path(input_path)
     if input_p.is_dir():
-        input_files = sorted(
-            str(f) for f in input_p.glob("*.cif")
-        )
+        input_files = sorted(str(f) for f in input_p.glob("*.cif"))
         if not input_files:
-            raise FileNotFoundError(
-                f"No CIF files found in: {input_path}"
-            )
+            raise FileNotFoundError(f"No CIF files found in: {input_path}")
     else:
         input_files = [str(input_p)]
 
-    jobs = list(
-        itertools.product(input_files, models, run_types)
-    )
+    jobs = list(itertools.product(input_files, models, run_types))
     if not jobs:
         print("No jobs to run.")
         return ""
@@ -475,8 +465,7 @@ def run_opt_uma_batch(
     n_workers = min(num_gpus, len(jobs))
 
     print(
-        f"Running {len(jobs)} jobs across "
-        f"{n_workers} workers (device={device})"
+        f"Running {len(jobs)} jobs across {n_workers} workers (device={device})"
     )
 
     ctx = get_context("spawn")
@@ -517,9 +506,7 @@ def run_opt_uma_batch(
     while not result_queue.empty():
         results.append(result_queue.get())
 
-    results.sort(
-        key=lambda r: (r["structure"], r["model"], r["run_type"])
-    )
+    results.sort(key=lambda r: (r["structure"], r["model"], r["run_type"]))
 
     outdir = Path(output_dir)
     outdir.mkdir(parents=True, exist_ok=True)

@@ -115,9 +115,7 @@ def graspa_batch_setup(
             cutoff=cutoff,
             n_cycle=cycles,
         )
-        click.echo(
-            f"Set up {len(manifest)} simulations in {outdir}"
-        )
+        click.echo(f"Set up {len(manifest)} simulations in {outdir}")
         click.echo(f"Manifest written to {outdir}/simulations.jsonl")
     except Exception as e:
         click.echo(f"Error setting up batch simulations: {e}", err=True)
@@ -626,14 +624,10 @@ def mlip_cli():
 @click.option(
     "--run-type",
     default="geo_opt",
-    type=click.Choice(
-        ["geo_opt", "cell_opt", "geo_opt_cell_opt"]
-    ),
+    type=click.Choice(["geo_opt", "cell_opt", "geo_opt_cell_opt"]),
     help="Optimization type.",
 )
-@click.option(
-    "--steps", default=1000, help="Max optimization steps."
-)
+@click.option("--steps", default=1000, help="Max optimization steps.")
 @click.option(
     "--fmax",
     default=1e-3,
@@ -722,14 +716,10 @@ def mace_opt_cmd(
 @click.option(
     "--run-type",
     default="geo_opt",
-    type=click.Choice(
-        ["geo_opt", "cell_opt", "geo_opt_cell_opt"]
-    ),
+    type=click.Choice(["geo_opt", "cell_opt", "geo_opt_cell_opt"]),
     help="Optimization type.",
 )
-@click.option(
-    "--steps", default=1000, help="Max optimization steps."
-)
+@click.option("--steps", default=1000, help="Max optimization steps.")
 @click.option(
     "--fmax",
     default=1e-3,
@@ -743,9 +733,7 @@ def mace_opt_cmd(
 @click.option(
     "--task-name",
     default="omat",
-    type=click.Choice(
-        ["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]
-    ),
+    type=click.Choice(["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]),
     help="Task head for domain-specific prediction.",
 )
 @click.option(
@@ -817,9 +805,7 @@ def uma_opt_cmd(
 @click.option(
     "--task-name",
     default="omat",
-    type=click.Choice(
-        ["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]
-    ),
+    type=click.Choice(["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]),
     help="Task head for domain-specific prediction.",
 )
 @click.option(
@@ -865,9 +851,7 @@ def uma_sp_cmd(fname, model, task_name, device):
 @click.option(
     "--task-name",
     default="omat",
-    type=click.Choice(
-        ["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]
-    ),
+    type=click.Choice(["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]),
     help="Task head for domain-specific prediction.",
 )
 @click.option(
@@ -886,9 +870,7 @@ def uma_sp_cmd(fname, model, task_name, device):
     default=1.0,
     help="MD timestep in femtoseconds.",
 )
-@click.option(
-    "--steps", default=1000, help="Number of MD steps."
-)
+@click.option("--steps", default=1000, help="Number of MD steps.")
 @click.option(
     "--ensemble",
     default="nvt",
@@ -985,22 +967,16 @@ def uma_md_cmd(
     "run_types",
     multiple=True,
     default=["geo_opt"],
-    type=click.Choice(
-        ["geo_opt", "cell_opt", "geo_opt_cell_opt"]
-    ),
+    type=click.Choice(["geo_opt", "cell_opt", "geo_opt_cell_opt"]),
     help="Optimization type(s). Can be specified multiple times.",
 )
 @click.option(
     "--task-name",
     default="omat",
-    type=click.Choice(
-        ["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]
-    ),
+    type=click.Choice(["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]),
     help="Task head for domain-specific prediction.",
 )
-@click.option(
-    "--steps", default=1000, help="Max optimization steps."
-)
+@click.option("--steps", default=1000, help="Max optimization steps.")
 @click.option(
     "--fmax",
     default=1e-3,
@@ -1138,8 +1114,17 @@ def zeopp_cli():
     type=click.Path(),
     help="Output directory for result files.",
 )
-def zeopp_run(cif, analysis, probe_radius, chan_radius, num_samples,
-              ha, radii, network_path, outdir):
+def zeopp_run(
+    cif,
+    analysis,
+    probe_radius,
+    chan_radius,
+    num_samples,
+    ha,
+    radii,
+    network_path,
+    outdir,
+):
     """Run Zeo++ analysis on a CIF structure."""
     from matkit.zeopp import run_zeopp
 
@@ -1244,9 +1229,16 @@ def zeopp_analyze(path, analysis):
     help="Max parallel processes. Default: CPU count.",
 )
 def zeopp_run_batch(
-    cif_dir, outdir, analysis, probe_radius,
-    chan_radius, num_samples, ha, radii,
-    network_path, max_workers,
+    cif_dir,
+    outdir,
+    analysis,
+    probe_radius,
+    chan_radius,
+    num_samples,
+    ha,
+    radii,
+    network_path,
+    max_workers,
 ):
     """Run Zeo++ on all CIFs in a directory.
 

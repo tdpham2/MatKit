@@ -17,16 +17,20 @@ def remove_solvent(path_to_cif, output_path, mass_ratio=0.8, skin=0.3):
 
     atoms = ase_read(path_to_cif)
     cutOff = neighborlist.natural_cutoffs(atoms)
-    neighborList = neighborlist.NeighborList(cutOff, 
-                                             self_interaction=False, 
-                                             bothways=True, 
-                                             skin=skin) 
+    neighborList = neighborlist.NeighborList(
+        cutOff, self_interaction=False, bothways=True, skin=skin
+    )
     neighborList.update(atoms)
     G = nx.Graph()
 
     for k in range(len(atoms)):
-        tup = (k, {"element": f"{atoms.get_chemical_symbols()[k]}", 
-                   "pos": atoms.get_positions()[k]})
+        tup = (
+            k,
+            {
+                "element": f"{atoms.get_chemical_symbols()[k]}",
+                "pos": atoms.get_positions()[k],
+            },
+        )
         G.add_nodes_from([tup])
 
     for k in range(len(atoms)):
@@ -48,11 +52,9 @@ def remove_solvent(path_to_cif, output_path, mass_ratio=0.8, skin=0.3):
         if index == max_index:
             continue
         else:
-            if mass/massG[max_index] < mass_ratio:
+            if mass / massG[max_index] < mass_ratio:
                 for n in Gcc[index]:
                     solvent_indice.append(n)
     ions_index = sorted(solvent_indice, reverse=True)
     del atoms[ions_index]
-    ase_write(f'{output_path}', atoms)
-
-
+    ase_write(f"{output_path}", atoms)

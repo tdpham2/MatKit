@@ -331,15 +331,11 @@ def run_zeopp(
         raise FileNotFoundError(f"CIF file does not exist: {cif}")
 
     if radii_file is None:
-        radii_file = str(
-            Path(__file__).parent / "files" / "UFF.rad"
-        )
+        radii_file = str(Path(__file__).parent / "files" / "UFF.rad")
 
     radii_path = Path(radii_file)
     if not radii_path.exists():
-        raise FileNotFoundError(
-            f"Radii file does not exist: {radii_file}"
-        )
+        raise FileNotFoundError(f"Radii file does not exist: {radii_file}")
 
     if analyses is None:
         analyses = ["res"]
@@ -380,20 +376,32 @@ def run_zeopp(
             if analysis == "res":
                 cmd.extend(["-res"])
             elif analysis == "sa":
-                cmd.extend([
-                    "-sa", str(probe_radius),
-                    str(chan_radius), str(num_samples),
-                ])
+                cmd.extend(
+                    [
+                        "-sa",
+                        str(probe_radius),
+                        str(chan_radius),
+                        str(num_samples),
+                    ]
+                )
             elif analysis == "vol":
-                cmd.extend([
-                    "-vol", str(probe_radius),
-                    str(chan_radius), str(num_samples),
-                ])
+                cmd.extend(
+                    [
+                        "-vol",
+                        str(probe_radius),
+                        str(chan_radius),
+                        str(num_samples),
+                    ]
+                )
             elif analysis == "psd":
-                cmd.extend([
-                    "-psd", str(probe_radius),
-                    str(chan_radius), str(num_samples),
-                ])
+                cmd.extend(
+                    [
+                        "-psd",
+                        str(probe_radius),
+                        str(chan_radius),
+                        str(num_samples),
+                    ]
+                )
             elif analysis == "chan":
                 cmd.extend(["-chan", str(probe_radius)])
         cmd.append(str(cif_dest))
@@ -480,15 +488,11 @@ def run_batch(
     """
     cif_path = Path(cif_dir)
     if not cif_path.exists():
-        raise FileNotFoundError(
-            f"CIF directory does not exist: {cif_dir}"
-        )
+        raise FileNotFoundError(f"CIF directory does not exist: {cif_dir}")
 
     cif_files = sorted(cif_path.glob("*.cif"))
     if not cif_files:
-        raise FileNotFoundError(
-            f"No CIF files found in: {cif_dir}"
-        )
+        raise FileNotFoundError(f"No CIF files found in: {cif_dir}")
 
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
@@ -515,9 +519,7 @@ def run_batch(
                 "structure": stem,
                 "status": "success",
             }
-            record.update(
-                _flatten_results(result["results"])
-            )
+            record.update(_flatten_results(result["results"]))
             return record
         except Exception as e:
             return {
@@ -528,10 +530,7 @@ def run_batch(
 
     results = []
     with ThreadPoolExecutor(max_workers) as pool:
-        futures = {
-            pool.submit(_process_one, cif): cif
-            for cif in cif_files
-        }
+        futures = {pool.submit(_process_one, cif): cif for cif in cif_files}
         for fut in futures:
             results.append(fut.result())
 
