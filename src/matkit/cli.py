@@ -1054,6 +1054,116 @@ def uma_opt_batch_cmd(
 
 
 # ==========================================
+# PACMOF2 COMMANDS
+# ==========================================
+@main.group("pacmof2")
+def pacmof2_cli():
+    """Commands for PACMOF2 charge prediction."""
+    pass
+
+
+@pacmof2_cli.command("predict")
+@click.option(
+    "--cif",
+    default=None,
+    type=click.Path(exists=True),
+    help="Path to a single CIF file.",
+)
+@click.option(
+    "--cif-dir",
+    default=None,
+    type=click.Path(exists=True, file_okay=False),
+    help="Directory containing CIF files.",
+)
+@click.option(
+    "--outdir",
+    required=True,
+    type=click.Path(),
+    help="Output directory for CIFs with predicted charges.",
+)
+@click.option(
+    "--identifier",
+    default="_pacmof",
+    help="Suffix for output filenames (default: _pacmof).",
+)
+@click.option(
+    "--net-charge",
+    default="0",
+    help="Net charge: integer for single MOF, or path to "
+    "JSON file mapping filenames to charges for batch.",
+)
+@click.option(
+    "--adjust-method",
+    default="mean",
+    type=click.Choice(["mean", "magnitude"]),
+    help="Charge adjustment method.",
+)
+def pacmof2_predict(
+    cif,
+    cif_dir,
+    outdir,
+    identifier,
+    net_charge,
+    adjust_method,
+):
+    """Predict partial atomic charges for CIF structures.
+
+    Provide either --cif for a single file or --cif-dir for
+    a directory of CIF files.
+
+    \b
+    Examples:
+      matkit pacmof2 predict --cif-dir cifs/ --outdir charged/
+      matkit pacmof2 predict --cif structure.cif --outdir charged/
+      matkit pacmof2 predict --cif-dir cifs/ --outdir charged/ \\
+          --net-charge charges.json
+    """
+    if cif and cif_dir:
+        click.echo(
+            "Error: specify --cif or --cif-dir, not both.",
+            err=True,
+        )
+        return
+    if not cif and not cif_dir:
+        click.echo("Error: provide --cif or --cif-dir.", err=True)
+        return
+
+    cif_path = cif_dir if cif_dir else cif
+
+    # Parse net_charge: try int/float first, then JSON path
+    try:
+        nc = int(net_charge)
+    except ValueError:
+        try:
+            nc = float(net_charge)
+        except ValueError:
+            nc = net_charge  # treat as JSON file path
+
+    try:
+        from matkit.pacmof2 import run_charge_prediction
+
+        result = run_charge_prediction(
+            cif_path=cif_path,
+            output_dir=outdir,
+            identifier=identifier,
+            net_charge=nc,
+            adjust_charge_method=adjust_method,
+        )
+        click.echo(
+            f"Predicted charges for {result['num_structures']} "
+            f"structure(s). Output: {result['output_dir']}"
+        )
+    except ImportError:
+        click.echo(
+            "Error: pacmof2 is required. "
+            "Install with: pip install matkit[pacmof2]",
+            err=True,
+        )
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+
+
+# ==========================================
 # ZEOPP COMMANDS
 # ==========================================
 @main.group("zeopp")
