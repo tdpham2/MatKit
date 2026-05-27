@@ -3,6 +3,10 @@
 Usage:
     python setup_isotherms.py <config.yaml>
     python setup_isotherms.py  # defaults to isotherm_config.yaml
+
+Supports two modes via the 'mode' field in the YAML config:
+    - single: each adsorbate runs as independent single-component sims
+    - mixture: all adsorbates run together in one sim (requires MolFraction)
 """
 
 import sys
@@ -38,11 +42,10 @@ def main():
     factor = PRESSURE_TO_PA[pressure_unit]
     pressures_pa = [p * factor for p in cfg["pressures"]]
 
-    adsorbates = [{"MoleculeName": name} for name in cfg["adsorbates"]]
-
+    mode = cfg.get("mode", "single")
     print(f"Config: {config_path}")
+    print(f"Mode: {mode}")
     print(f"CIF dir: {cfg['cif_dir']}")
-    print(f"Adsorbates: {cfg['adsorbates']}")
     print(f"Temperatures: {cfg['temperatures']}")
     print(
         f"Pressures: {len(pressures_pa)} points "
@@ -50,10 +53,8 @@ def main():
         f"{cfg.get('pressure_unit', 'Pa')})"
     )
 
-    manifest = setup_batch(
+    common_kwargs = dict(
         cif_dir=cfg["cif_dir"],
-        outpath=cfg["outdir"],
-        adsorbates=adsorbates,
         temperatures=cfg["temperatures"],
         pressures=pressures_pa,
         cutoff=cfg.get("cutoff", 12.8),
@@ -61,7 +62,45 @@ def main():
         max_workers=cfg.get("max_workers"),
     )
 
-    print(f"\nSet up {len(manifest)} simulations in {cfg['outdir']}")
+    if mode == "single":
+        print(f"Adsorbates: {cfg['adsorbates']} (each runs independently)")
+        total = 0
+        for ads_name in cfg["adsorbates"]:
+            ads_outdir = str(Path(cfg["outdir"]) / ads_name)
+            adsorbates = [{"MoleculeName": ads_name}]
+            manifest = setup_batch(
+                outpath=ads_outdir,
+                adsorbates=adsorbates,
+                template_dir=cfg.get("template_dir", "template"),
+                **common_kwargs,
+            )
+            print(f"  {ads_name}: {len(manifest)} simulations in {ads_outdir}")
+            total += len(manifest)
+        print(f"\nTotal: {total} simulations")
+
+    elif mode == "mixture":
+        adsorbates = []
+        for ad in cfg["adsorbates"]:
+            entry = {"MoleculeName": ad["name"]}
+            for k, v in ad.items():
+                if k != "name":
+                    entry[k] = v
+            adsorbates.append(entry)
+        names = [ad["MoleculeName"] for ad in adsorbates]
+        print(f"Adsorbates: {names} (mixture)")
+
+        template_dir = cfg.get("template_dir", "template_mixture_isotherm")
+        manifest = setup_batch(
+            outpath=cfg["outdir"],
+            adsorbates=adsorbates,
+            template_dir=template_dir,
+            **common_kwargs,
+        )
+        print(f"\nSet up {len(manifest)} simulations in {cfg['outdir']}")
+
+    else:
+        raise ValueError(f"Unknown mode '{mode}'. Use 'single' or 'mixture'.")
+
     print(f"Manifest: {cfg['outdir']}/simulations.jsonl")
 
 
