@@ -1,10 +1,13 @@
+import logging
 import subprocess
 from pathlib import Path
 
-import numpy as np
 import networkx as nx
-from ase.io import read as ase_read, write as ase_write
+import numpy as np
 from ase import neighborlist
+from ase.io import read as ase_read, write as ase_write
+
+logger = logging.getLogger(__name__)
 
 # Periodic table list
 PT = {
@@ -329,7 +332,7 @@ def create_linker(
     Path(initial_cif).unlink(missing_ok=True)
     Path("temp.cif").unlink(missing_ok=True)
 
-    print(f"Successfully created linker: {output_cif}")
+    logger.info("Successfully created linker: %s", output_cif)
 
 
 # === Run the Workflow ===

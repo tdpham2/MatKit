@@ -1,11 +1,27 @@
+import logging
+
 import click
 import json
 
 
 @click.group()
-def main():
+@click.option(
+    "-v",
+    "--verbose",
+    count=True,
+    help="Increase verbosity (-v for info, -vv for debug).",
+)
+def main(verbose):
     """MatKit CLI: A modular toolkit for molecular simulations."""
-    pass
+    level = logging.WARNING
+    if verbose == 1:
+        level = logging.INFO
+    elif verbose >= 2:
+        level = logging.DEBUG
+    logging.basicConfig(
+        level=level,
+        format="%(name)s: %(message)s",
+    )
 
 
 # ==========================================
