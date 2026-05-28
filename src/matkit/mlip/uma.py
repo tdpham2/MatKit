@@ -1,7 +1,11 @@
+import logging
 from pathlib import Path
 
+from ase import units
 from ase.io import read as ase_read
 from ase.io import write as ase_write
+from ase.md.langevin import Langevin
+from ase.md.verlet import VelocityVerlet
 from ase.optimize import BFGS
 
 try:
@@ -11,9 +15,8 @@ except ImportError:
         from ase.constraints import ExpCellFilter
     except ImportError:
         from ase.filters import FrechetCellFilter as ExpCellFilter
-from ase.md.langevin import Langevin
-from ase.md.verlet import VelocityVerlet
-from ase import units
+
+logger = logging.getLogger(__name__)
 
 
 def _create_calculator(
@@ -361,10 +364,12 @@ def _gpu_worker(
                     "error_message": None,
                 }
             )
-            print(
-                f"[GPU {gpu_id}] Done: {tag} "
-                f"(E={result['final_energy']:.4f}, "
-                f"converged={result['converged']})"
+            logger.info(
+                "[GPU %d] Done: %s (E=%.4f, converged=%s)",
+                gpu_id,
+                tag,
+                result["final_energy"],
+                result["converged"],
             )
         except Exception as e:
             result_queue.put(
@@ -381,7 +386,7 @@ def _gpu_worker(
                     "error_message": str(e),
                 }
             )
-            print(f"[GPU {gpu_id}] ERROR: {tag}: {e}")
+            logger.error("[GPU %d] ERROR: %s: %s", gpu_id, tag, e)
 
 
 def run_opt_uma_batch(
@@ -445,7 +450,7 @@ def run_opt_uma_batch(
 
     jobs = list(itertools.product(input_files, models, run_types))
     if not jobs:
-        print("No jobs to run.")
+        logger.warning("No jobs to run.")
         return ""
 
     # Auto-detect GPU count
@@ -464,8 +469,11 @@ def run_opt_uma_batch(
 
     n_workers = min(num_gpus, len(jobs))
 
-    print(
-        f"Running {len(jobs)} jobs across {n_workers} workers (device={device})"
+    logger.info(
+        "Running %d jobs across %d workers (device=%s)",
+        len(jobs),
+        n_workers,
+        device,
     )
 
     ctx = get_context("spawn")
@@ -520,10 +528,13 @@ def run_opt_uma_batch(
         for rec in results:
             f.write(json.dumps(rec) + "\n")
 
-    print(
-        f"Batch complete: {success} success, {skipped} skipped, "
-        f"{failed} failure out of {len(results)} jobs"
+    logger.info(
+        "Batch complete: %d success, %d skipped, %d failure out of %d jobs",
+        success,
+        skipped,
+        failed,
+        len(results),
     )
-    print(f"Results: {summary_path}")
+    logger.info("Results: %s", summary_path)
 
     return str(summary_path)

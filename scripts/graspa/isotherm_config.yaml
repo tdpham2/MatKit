@@ -4,6 +4,10 @@
 cif_dir: ./cifs
 outdir: ./batch_results
 
+# mode: single — each adsorbate runs independently (separate sims)
+# mode: mixture — all adsorbates run together in one sim (requires MolFraction)
+mode: single
+
 adsorbates: [CO2, N2]
 
 temperatures: [283, 293, 313, 333]

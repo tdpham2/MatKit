@@ -1,5 +1,8 @@
 import json
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def parse_raspa2_pseudo_atom(filepath):
@@ -126,5 +129,5 @@ def save_force_field(pseudo_fp, force_field_fp, outpath):
     with open(output_file, "w") as f:
         json.dump(combined, f, indent=2)
 
-    print(f"Saved combined force field to {output_file}")
+    logger.info("Saved combined force field to %s", output_file)
     return combined

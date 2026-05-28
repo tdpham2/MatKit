@@ -1,10 +1,13 @@
+import logging
 from pathlib import Path
 
-from mace.calculators import mace_mp
+from ase.constraints import ExpCellFilter
 from ase.io import read as ase_read
 from ase.io import write as ase_write
 from ase.optimize import BFGS
-from ase.constraints import ExpCellFilter
+from mace.calculators import mace_mp
+
+logger = logging.getLogger(__name__)
 
 
 def run_opt_mace(
@@ -78,13 +81,13 @@ def run_opt_mace(
                 dyn.run(fmax=fmax, steps=steps)
 
         else:
-            print(
-                (f"run_type {run_type} is not supported."),
-                ("Options are 'geo_opt', cell_opt' and 'geo_opt_cell_opt'"),
+            raise ValueError(
+                f"run_type '{run_type}' is not supported. "
+                "Options are 'geo_opt', 'cell_opt', and 'geo_opt_cell_opt'."
             )
-            return "Error"
 
         ase_write(output_fname, atoms)
 
     except Exception as e:
-        print(e)
+        logger.error("MACE optimization failed: %s", e)
+        raise

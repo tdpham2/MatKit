@@ -1,7 +1,10 @@
-from pathlib import Path
 import shutil
-from matkit.utils.unitcell_calculator import calculate_cell_size
+from pathlib import Path
+
 from ase.io import read as ase_read
+
+from matkit.utils.template import copy_template, render_template
+from matkit.utils.unitcell_calculator import calculate_cell_size
 
 _file_dir = Path(__file__).parent / "files" / "template"
 
@@ -44,42 +47,23 @@ def setup_input_simulation(
 
         cifname = cifpath.stem
         outdir = outpath / cifname
-        outdir.mkdir(parents=True, exist_ok=True)
-        for item in _file_dir.iterdir():
-            if item.is_dir():
-                shutil.copytree(item, outdir, dirs_exist_ok=True)
-            else:
-                shutil.copy2(item, outdir)
+        copy_template(_file_dir, outdir)
         shutil.copy(cif, outdir)
-        # Editing input file.
+
         atoms = ase_read(cif)
-        [uc_x, uc_y, uc_z] = calculate_cell_size(atoms)
+        uc_x, uc_y, uc_z = calculate_cell_size(atoms)
 
-        with (
-            open(f"{outdir}/simulation.input", "r") as f_in,
-            open(f"{outdir}/simulation.input.tmp", "w") as f_out,
-        ):
-            for line in f_in:
-                if "NCYCLE" in line:
-                    line = line.replace("NCYCLE", str(n_cycle))
-                if "ADSORBATE" in line:
-                    line = line.replace("ADSORBATE", adsorbate)
-                if "TEMPERATURE" in line:
-                    line = line.replace("TEMPERATURE", str(temperature))
-                if "PRESSURE" in line:
-                    line = line.replace("PRESSURE", str(pressure))
-                if "UC_X UC_Y UC_Z" in line:
-                    line = line.replace(
-                        "UC_X UC_Y UC_Z", f"{uc_x} {uc_y} {uc_z}"
-                    )
-                if "CUTOFF" in line:
-                    line = line.replace("CUTOFF", str(cutoff))
-                if "CIFFILE" in line:
-                    line = line.replace("CIFFILE", cifname)
-                f_out.write(line)
-
-        shutil.move(
-            f"{outdir}/simulation.input.tmp", f"{outdir}/simulation.input"
+        render_template(
+            outdir / "simulation.input",
+            {
+                "NCYCLE": str(n_cycle),
+                "ADSORBATE": adsorbate,
+                "TEMPERATURE": str(temperature),
+                "PRESSURE": str(pressure),
+                "UC_X UC_Y UC_Z": f"{uc_x} {uc_y} {uc_z}",
+                "CUTOFF": str(cutoff),
+                "CIFFILE": cifname,
+            },
         )
 
     return True

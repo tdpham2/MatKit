@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
@@ -8,6 +9,8 @@ import subprocess
 import tempfile
 
 from matkit.types import ZeoppResult
+
+logger = logging.getLogger(__name__)
 
 
 VALID_ANALYSES = {"res", "sa", "vol", "psd", "chan"}
@@ -547,9 +550,11 @@ def run_batch(
 
     total = len(results)
     failed = total - success
-    print(
-        f"Zeo++ batch complete: {success} success, "
-        f"{failed} failure out of {total} structures"
+    logger.info(
+        "Zeo++ batch complete: %d success, %d failure out of %d structures",
+        success,
+        failed,
+        total,
     )
 
     return str(summary_path)
