@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import shutil
 from concurrent.futures import ThreadPoolExecutor
 from itertools import product
 from pathlib import Path
-import shutil
-from matkit.utils.unitcell_calculator import calculate_cell_size
-from matkit.types import GRASPAResult
+
 from ase.io import read as ase_read
+
+from matkit.types import GRASPAResult
+from matkit.utils.template import copy_template, render_template
+from matkit.utils.unitcell_calculator import calculate_cell_size
 
 
 def get_output_data(
@@ -191,21 +194,15 @@ def setup_simulation(
         FileNotFoundError: If the CIF file does not exist.
     """
     outdir = Path(outpath)
-    outdir.mkdir(parents=True, exist_ok=True)
 
     cifpath = Path(cif)
     if not cifpath.exists():
         raise FileNotFoundError(f"CIF file does not exist: {cif}")
     cifname = cifpath.stem
-    shutil.copy(cifpath, outdir / f"{cifname}.cif")
 
-    # Copy template files
     template_path = Path(__file__).parent / "files" / template_dir
-    for item in template_path.iterdir():
-        if item.is_dir():
-            shutil.copytree(item, outdir, dirs_exist_ok=True)
-        else:
-            shutil.copy2(item, outdir)
+    copy_template(template_path, outdir)
+    shutil.copy(cifpath, outdir / f"{cifname}.cif")
 
     # Use pre-computed cell size or read CIF
     if cell_size is not None:
@@ -214,31 +211,26 @@ def setup_simulation(
         atoms = ase_read(cifpath)
         uc_x, uc_y, uc_z = calculate_cell_size(atoms)
 
-    # Read template and replace placeholders
     input_path = outdir / "simulation.input"
-    with input_path.open("r") as f:
-        template = f.read()
-
-    subs = {
-        "NCYCLE": str(n_cycle),
-        "TEMPERATURE": str(temperature),
-        "PRESSURE": str(pressure),
-        "CUTOFF": str(cutoff),
-        "CIFFILE": cifname,
-        "UC_X": str(uc_x),
-        "UC_Y": str(uc_y),
-        "UC_Z": str(uc_z),
-    }
-
-    for key, val in subs.items():
-        template = template.replace(key, val)
+    render_template(
+        input_path,
+        {
+            "NCYCLE": str(n_cycle),
+            "TEMPERATURE": str(temperature),
+            "PRESSURE": str(pressure),
+            "CUTOFF": str(cutoff),
+            "CIFFILE": cifname,
+            "UC_X": str(uc_x),
+            "UC_Y": str(uc_y),
+            "UC_Z": str(uc_z),
+        },
+    )
 
     # Replace component block placeholder
     component_block = generate_component_blocks(adsorbates)
-    template = template.replace("__COMPONENTS__", component_block)
-    # Write final input
-    with input_path.open("w") as f:
-        f.write(template)
+    content = input_path.read_text()
+    content = content.replace("__COMPONENTS__", component_block)
+    input_path.write_text(content)
 
     return True
 
