@@ -9,6 +9,7 @@ from pathlib import Path
 from ase.io import read as ase_read
 
 from matkit.types import GRASPAResult
+from matkit.utils.cif import sanitize_cif_stem
 from matkit.utils.template import copy_template, render_template
 from matkit.utils.unitcell_calculator import calculate_cell_size
 
@@ -198,11 +199,11 @@ def setup_simulation(
     cifpath = Path(cif)
     if not cifpath.exists():
         raise FileNotFoundError(f"CIF file does not exist: {cif}")
-    cifname = cifpath.stem
+    safe_stem = sanitize_cif_stem(cifpath.stem)
 
     template_path = Path(__file__).parent / "files" / template_dir
     copy_template(template_path, outdir)
-    shutil.copy(cifpath, outdir / f"{cifname}.cif")
+    shutil.copy(cifpath, outdir / f"{safe_stem}.cif")
 
     # Use pre-computed cell size or read CIF
     if cell_size is not None:
@@ -219,7 +220,7 @@ def setup_simulation(
             "TEMPERATURE": str(temperature),
             "PRESSURE": str(pressure),
             "CUTOFF": str(cutoff),
-            "CIFFILE": cifname,
+            "CIFFILE": safe_stem,
             "UC_X": str(uc_x),
             "UC_Y": str(uc_y),
             "UC_Z": str(uc_z),
@@ -252,10 +253,11 @@ def _setup_single_cif(
     """
     atoms = ase_read(cif)
     cell_size = calculate_cell_size(atoms)
+    safe_stem = sanitize_cif_stem(cif.stem)
 
     entries = []
     for temp, pres in product(temperatures, pressures):
-        sim_dir = out_path / cif.stem / f"T{temp}_P{pres:g}"
+        sim_dir = out_path / safe_stem / f"T{temp}_P{pres:g}"
         setup_simulation(
             cif=str(cif),
             outpath=str(sim_dir),
@@ -267,15 +269,17 @@ def _setup_single_cif(
             template_dir=template_dir,
             cell_size=cell_size,
         )
-        entries.append(
-            {
-                "sim_dir": str(sim_dir),
-                "cif": cif.name,
-                "temperature": temp,
-                "pressure": pres,
-                "adsorbates": [ad["MoleculeName"] for ad in adsorbates],
-            }
-        )
+        entry = {
+            "sim_dir": str(sim_dir),
+            "cif": cif.name,
+            "temperature": temp,
+            "pressure": pres,
+            "adsorbates": [ad["MoleculeName"] for ad in adsorbates],
+        }
+        if safe_stem != cif.stem:
+            entry["original_cif_stem"] = cif.stem
+            entry["safe_cif_stem"] = safe_stem
+        entries.append(entry)
     return entries
 
 
@@ -352,4 +356,26 @@ def setup_batch(
         for entry in manifest:
             f.write(json.dumps(entry) + "\n")
 
+    rename_map = {
+        entry["original_cif_stem"]: entry["safe_cif_stem"]
+        for entry in manifest
+        if "original_cif_stem" in entry
+    }
+    if rename_map:
+        _write_cif_mapping(out_path, rename_map)
+
     return manifest
+
+
+def _write_cif_mapping(out_path: Path, mapping: dict[str, str]) -> None:
+    """Write {original_stem: safe_stem} to out_path/cif_mapping.json.
+
+    Merges with any existing file so re-running setup_batch with
+    additional CIFs is additive.
+    """
+    mapping_path = out_path / "cif_mapping.json"
+    existing: dict[str, str] = {}
+    if mapping_path.exists():
+        existing = json.loads(mapping_path.read_text())
+    existing.update(mapping)
+    mapping_path.write_text(json.dumps(existing, indent=2, sort_keys=True))
