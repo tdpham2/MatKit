@@ -3,6 +3,7 @@ from pathlib import Path
 
 from ase.io import read as ase_read
 
+from matkit.utils.cif import sanitize_cif_stem
 from matkit.utils.template import copy_template, render_template
 from matkit.utils.unitcell_calculator import calculate_cell_size
 
@@ -41,9 +42,9 @@ def setup_simulation(
     if not cifpath.exists():
         raise FileNotFoundError(f"CIF file does not exist: {cif}")
 
-    cifname = cifpath.stem
+    safe_stem = sanitize_cif_stem(cifpath.stem)
     copy_template(_file_dir, outdir)
-    shutil.copy(cif, outdir)
+    shutil.copy(cifpath, outdir / f"{safe_stem}.cif")
 
     atoms = ase_read(cif)
     uc_x, uc_y, uc_z = calculate_cell_size(atoms)
@@ -57,7 +58,7 @@ def setup_simulation(
             "PRESSURE": str(pressure),
             "UC_X UC_Y UC_Z": f"{uc_x} {uc_y} {uc_z}",
             "CUTOFF": str(cutoff),
-            "CIFFILE": cifname,
+            "CIFFILE": safe_stem,
         },
     )
 

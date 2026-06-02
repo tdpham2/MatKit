@@ -1,12 +1,17 @@
 """Tests for matkit.graspa module."""
 
+import json
+import shutil
+
 import pytest
 from pathlib import Path
 
 from matkit.graspa.graspa import (
     generate_component_blocks,
+    setup_batch,
     setup_simulation,
 )
+from matkit.utils.cif import sanitize_cif_stem
 
 
 class TestGenerateComponentBlocks:
@@ -124,3 +129,86 @@ class TestSetupSimulation:
                 outpath=str(tmp_path / "out"),
                 adsorbates=[{"MoleculeName": "CO2"}],
             )
+
+    def test_setup_sanitizes_multi_period_cif(self, sample_cif, tmp_path):
+        """CIFs with extra periods should be copied under a safe name."""
+        weird_cif = tmp_path / "foo.bar.cif"
+        shutil.copy(sample_cif, weird_cif)
+        outdir = tmp_path / "sim_output"
+
+        setup_simulation(
+            cif=str(weird_cif),
+            outpath=str(outdir),
+            adsorbates=[{"MoleculeName": "CO2"}],
+        )
+
+        assert (outdir / "foo_bar.cif").exists()
+        assert not (outdir / "foo.bar.cif").exists()
+        content = (outdir / "simulation.input").read_text()
+        assert "FrameworkName foo_bar" in content
+
+
+class TestSanitizeCifStem:
+    """Tests for the sanitize_cif_stem helper."""
+
+    def test_no_period_unchanged(self):
+        assert sanitize_cif_stem("MOF5") == "MOF5"
+
+    def test_single_internal_period_replaced(self):
+        assert sanitize_cif_stem("foo.bar") == "foo_bar"
+
+    def test_multiple_periods_replaced(self):
+        assert (
+            sanitize_cif_stem("str_m5_o11_o18_sra_sym.22")
+            == "str_m5_o11_o18_sra_sym_22"
+        )
+
+
+class TestSetupBatch:
+    """Tests for gRASPA batch setup, focusing on CIF rename mapping."""
+
+    def test_batch_writes_mapping_only_for_renamed(
+        self, sample_cif, tmp_path
+    ):
+        """cif_mapping.json should list only CIFs that needed renaming."""
+        cif_dir = tmp_path / "cifs"
+        cif_dir.mkdir()
+        shutil.copy(sample_cif, cif_dir / "clean.cif")
+        shutil.copy(sample_cif, cif_dir / "weird.v2.cif")
+
+        out_dir = tmp_path / "batch_out"
+        manifest = setup_batch(
+            cif_dir=str(cif_dir),
+            outpath=str(out_dir),
+            adsorbates=[{"MoleculeName": "CO2"}],
+            temperatures=[298.0],
+            pressures=[1e5],
+            n_cycle=10,
+        )
+
+        assert len(manifest) == 2
+        mapping_path = out_dir / "cif_mapping.json"
+        assert mapping_path.exists()
+        mapping = json.loads(mapping_path.read_text())
+        assert mapping == {"weird.v2": "weird_v2"}
+
+        assert (out_dir / "weird_v2" / "T298.0_P100000" / "weird_v2.cif").exists()
+        assert (out_dir / "clean" / "T298.0_P100000" / "clean.cif").exists()
+
+    def test_batch_no_mapping_when_all_clean(self, sample_cif, tmp_path):
+        """cif_mapping.json should not be written if no rename occurred."""
+        cif_dir = tmp_path / "cifs"
+        cif_dir.mkdir()
+        shutil.copy(sample_cif, cif_dir / "clean.cif")
+
+        out_dir = tmp_path / "batch_out"
+        setup_batch(
+            cif_dir=str(cif_dir),
+            outpath=str(out_dir),
+            adsorbates=[{"MoleculeName": "CO2"}],
+            temperatures=[298.0],
+            pressures=[1e5],
+            n_cycle=10,
+        )
+
+        assert not (out_dir / "cif_mapping.json").exists()
