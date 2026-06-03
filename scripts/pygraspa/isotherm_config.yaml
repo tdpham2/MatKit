@@ -1,0 +1,42 @@
+# pygRASPA isotherm simulation config (ML-potential GCMC)
+# Usage: python setup_isotherms.py isotherm_config.yaml
+
+cif_dir: ./cifs
+outdir: ./batch_results
+
+# mode: single   — each adsorbate runs independently (separate sims)
+# mode: mixture  — all adsorbates run together in one sim (requires MolFraction)
+mode: single
+
+adsorbates: [CO2, N2]
+
+# ML configuration (required for pygRASPA).
+# ecomps must contain one entry per adsorbate name above.
+# Compute these once with `matkit pygraspa compute-ecomp` and paste here.
+ml:
+  model_path: /path/to/model.pt
+  model_type: FAIRChem-esen   # FAIRChem-esen | FAIRChem-uma | FAIRChem-AllScAIP | mace_polar | Allegro
+  task: null                  # required for FAIRChem-uma / FAIRChem-AllScAIP
+  run_mode: run-auto          # run | run-auto
+  save_poscar: false
+  ecomps:
+    CO2: -22.97915
+    N2: -17.5
+    # H2O: -14.2
+    # CH4: -11.3
+
+temperatures: [298]
+
+pressures:
+  - 0.001
+  - 0.01
+  - 0.05
+  - 0.1
+  - 0.5
+  - 1.0
+
+pressure_unit: bar  # bar, kPa, atm, or Pa
+
+cutoff: 12.8
+cycles: 50000
+max_workers: 4  # parallel threads for CIF processing (null = auto)

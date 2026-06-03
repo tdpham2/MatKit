@@ -247,6 +247,381 @@ def graspa_sycl_analyze(path, unit, adsorbate, fname):
 
 
 # ==========================================
+# PYGRASPA COMMANDS (ML-potential GCMC)
+# ==========================================
+@main.group("pygraspa")
+def pygraspa_cli():
+    """Commands for pygRASPA simulations (ML-potential GCMC).
+
+    Writes simulation files plus a ``run.py`` launcher. Execute on a GPU
+    machine with pygRASPA + the required ML backend installed.
+    """
+    pass
+
+
+def _parse_ecomps(ctx, param, value):
+    """Click callback: convert comma-separated floats into a list."""
+    if value is None:
+        return None
+    parts = [p.strip() for p in value.split(",") if p.strip()]
+    try:
+        return [float(p) for p in parts]
+    except ValueError as e:
+        raise click.BadParameter(
+            f"--ecomps must be comma-separated floats: {e}"
+        )
+
+
+@pygraspa_cli.command("setup")
+@click.option(
+    "--cif",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to input CIF file.",
+)
+@click.option(
+    "--outdir",
+    required=True,
+    type=click.Path(),
+    help="Directory to generate simulation files.",
+)
+@click.option(
+    "--adsorbate",
+    required=True,
+    multiple=True,
+    help="Adsorbate molecule name (e.g. CO2). Can be repeated.",
+)
+@click.option(
+    "--model",
+    "model_path",
+    required=True,
+    help="ML model checkpoint path.",
+)
+@click.option(
+    "--model-type",
+    default="FAIRChem-esen",
+    type=click.Choice(
+        [
+            "FAIRChem-esen",
+            "FAIRChem-uma",
+            "FAIRChem-AllScAIP",
+            "mace_polar",
+            "Allegro",
+            "customized",
+        ]
+    ),
+    help="ML backend identifier.",
+)
+@click.option(
+    "--task",
+    default=None,
+    help="Task name (FAIRChem-uma / AllScAIP).",
+)
+@click.option(
+    "--ecomps",
+    required=True,
+    callback=_parse_ecomps,
+    help="Comma-separated E_comp values (eV), one per --adsorbate.",
+)
+@click.option(
+    "--mode",
+    default="run-auto",
+    type=click.Choice(["run", "run-auto"]),
+    help="pygRASPA execution mode written into run.py.",
+)
+@click.option("--save-poscar", is_flag=True, help="Save accepted POSCARs.")
+@click.option("--temp", default=298.0, help="Temperature in Kelvin.")
+@click.option("--pressure", default=1e5, help="Pressure in Pa.")
+@click.option("--cutoff", default=12.8, help="Cutoff radius (Angstrom).")
+@click.option("--cycles", default=1000, help="Number of MC cycles.")
+@click.option(
+    "--template-dir",
+    default="template",
+    help=(
+        "Template subdir (template, template_mixture, "
+        "template_mixture_isotherm)."
+    ),
+)
+def pygraspa_setup(
+    cif,
+    outdir,
+    adsorbate,
+    model_path,
+    model_type,
+    task,
+    ecomps,
+    mode,
+    save_poscar,
+    temp,
+    pressure,
+    cutoff,
+    cycles,
+    template_dir,
+):
+    """Setup a pygRASPA simulation."""
+    from matkit.pygraspa import setup_simulation
+
+    adsorbate_list = [{"MoleculeName": ads} for ads in adsorbate]
+    try:
+        setup_simulation(
+            cif=cif,
+            outpath=outdir,
+            adsorbates=adsorbate_list,
+            model_path=model_path,
+            model_type=model_type,
+            E_comps=ecomps,
+            task=task,
+            mode=mode,
+            save_poscar=save_poscar,
+            temperature=temp,
+            pressure=pressure,
+            cutoff=cutoff,
+            n_cycle=cycles,
+            template_dir=template_dir,
+        )
+        click.echo(f"Successfully set up pygRASPA simulation in {outdir}")
+    except Exception as e:
+        click.echo(f"Error setting up pygRASPA simulation: {e}", err=True)
+
+
+@pygraspa_cli.command("batch-setup")
+@click.option(
+    "--cif-dir",
+    required=True,
+    type=click.Path(exists=True, file_okay=False),
+    help="Directory containing CIF files.",
+)
+@click.option(
+    "--outdir",
+    required=True,
+    type=click.Path(),
+    help="Base output directory.",
+)
+@click.option(
+    "--adsorbate",
+    required=True,
+    multiple=True,
+    help="Adsorbate molecule name. Can be repeated.",
+)
+@click.option(
+    "--model",
+    "model_path",
+    required=True,
+    help="ML model checkpoint path.",
+)
+@click.option(
+    "--model-type",
+    default="FAIRChem-esen",
+    type=click.Choice(
+        [
+            "FAIRChem-esen",
+            "FAIRChem-uma",
+            "FAIRChem-AllScAIP",
+            "mace_polar",
+            "Allegro",
+            "customized",
+        ]
+    ),
+    help="ML backend identifier.",
+)
+@click.option(
+    "--task",
+    default=None,
+    help="Task name (FAIRChem-uma / AllScAIP).",
+)
+@click.option(
+    "--ecomps",
+    required=True,
+    callback=_parse_ecomps,
+    help="Comma-separated E_comp values, one per --adsorbate.",
+)
+@click.option(
+    "--mode",
+    default="run-auto",
+    type=click.Choice(["run", "run-auto"]),
+    help="pygRASPA execution mode written into run.py.",
+)
+@click.option("--save-poscar", is_flag=True, help="Save accepted POSCARs.")
+@click.option(
+    "--temp",
+    required=True,
+    multiple=True,
+    type=float,
+    help="Temperature(s) in Kelvin. Can be repeated.",
+)
+@click.option(
+    "--pressure",
+    required=True,
+    multiple=True,
+    type=float,
+    help="Pressure(s) in Pa. Can be repeated.",
+)
+@click.option("--cutoff", default=12.8, help="Cutoff radius (Angstrom).")
+@click.option("--cycles", default=1000, help="Number of MC cycles.")
+@click.option(
+    "--template-dir",
+    default="template",
+    help="Template subdir.",
+)
+@click.option(
+    "--workers",
+    default=None,
+    type=int,
+    help="Max parallel threads for CIF processing.",
+)
+def pygraspa_batch_setup(
+    cif_dir,
+    outdir,
+    adsorbate,
+    model_path,
+    model_type,
+    task,
+    ecomps,
+    mode,
+    save_poscar,
+    temp,
+    pressure,
+    cutoff,
+    cycles,
+    template_dir,
+    workers,
+):
+    """Set up pygRASPA simulations for all CIF x T x P."""
+    from matkit.pygraspa import setup_batch
+
+    adsorbate_list = [{"MoleculeName": ads} for ads in adsorbate]
+    try:
+        manifest = setup_batch(
+            cif_dir=cif_dir,
+            outpath=outdir,
+            adsorbates=adsorbate_list,
+            model_path=model_path,
+            model_type=model_type,
+            E_comps=ecomps,
+            task=task,
+            mode=mode,
+            save_poscar=save_poscar,
+            temperatures=list(temp),
+            pressures=list(pressure),
+            cutoff=cutoff,
+            n_cycle=cycles,
+            template_dir=template_dir,
+            max_workers=workers,
+        )
+        click.echo(f"Set up {len(manifest)} simulations in {outdir}")
+        click.echo(f"Manifest written to {outdir}/simulations.jsonl")
+    except Exception as e:
+        click.echo(f"Error setting up batch simulations: {e}", err=True)
+
+
+@pygraspa_cli.command("compute-ecomp")
+@click.option(
+    "--def-file",
+    "def_file",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to adsorbate .def file.",
+)
+@click.option(
+    "--model",
+    "model_path",
+    required=True,
+    help="ML model checkpoint path.",
+)
+@click.option(
+    "--model-type",
+    default="FAIRChem-esen",
+    type=click.Choice(
+        [
+            "FAIRChem-esen",
+            "FAIRChem-uma",
+            "FAIRChem-AllScAIP",
+            "mace_polar",
+            "Allegro",
+            "customized",
+        ]
+    ),
+)
+@click.option(
+    "--task",
+    default=None,
+    help="Task name (FAIRChem-uma / AllScAIP).",
+)
+@click.option("--device", default="cuda", type=click.Choice(["cuda", "cpu"]))
+@click.option(
+    "--cache",
+    "cache_path",
+    default=None,
+    type=click.Path(),
+    help="JSON cache file to memoize results.",
+)
+def pygraspa_compute_ecomp(
+    def_file,
+    model_path,
+    model_type,
+    task,
+    device,
+    cache_path,
+):
+    """Compute E_comp (isolated-adsorbate ML energy) via pygRASPA."""
+    from matkit.pygraspa import compute_ecomp
+
+    try:
+        value = compute_ecomp(
+            adsorbate_def=def_file,
+            model_path=model_path,
+            model_type=model_type,
+            task=task,
+            device=device,
+            cache_path=cache_path,
+        )
+        click.echo(
+            json.dumps(
+                {"adsorbate_def": def_file, "E_comp_eV": value},
+                indent=2,
+            )
+        )
+    except Exception as e:
+        click.echo(f"Error computing E_comp: {e}", err=True)
+
+
+@pygraspa_cli.command("analyze")
+@click.option(
+    "--path",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to simulation output directory.",
+)
+@click.option(
+    "--unit",
+    default="mol/kg",
+    type=click.Choice(["mol/kg", "mg/g", "g/L"]),
+    help="Unit for uptake.",
+)
+@click.option("--fname", default="output.log", help="Log filename.")
+@click.option(
+    "--skip-cycles",
+    default=None,
+    type=int,
+    help="Override n_skip_cycles (default: from simulation.input).",
+)
+def pygraspa_analyze(path, unit, fname, skip_cycles):
+    """Analyze pygRASPA simulation results."""
+    from matkit.pygraspa import get_output_data
+
+    try:
+        result = get_output_data(
+            output_path=path,
+            unit=unit,
+            output_fname=fname,
+            n_skip_cycles=skip_cycles,
+        )
+        click.echo(json.dumps(result, indent=2))
+    except Exception as e:
+        click.echo(f"Error analyzing pygRASPA results: {e}", err=True)
+
+
+# ==========================================
 # RASPA2 COMMANDS
 # ==========================================
 @main.group("raspa2")
