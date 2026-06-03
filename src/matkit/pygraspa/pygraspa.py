@@ -149,9 +149,7 @@ def setup_simulation(
             "must have the same length"
         )
     if model_type in ("FAIRChem-uma", "FAIRChem-AllScAIP") and not task:
-        raise ValueError(
-            f"task is required when model_type is '{model_type}'"
-        )
+        raise ValueError(f"task is required when model_type is '{model_type}'")
 
     outdir = Path(outpath)
     cifpath = Path(cif)
@@ -542,9 +540,7 @@ def get_output_data(
             except json.JSONDecodeError:
                 continue
             cycle = next((rec[k] for k in cycle_keys if k in rec), None)
-            counts = next(
-                (rec[k] for k in count_keys if k in rec), None
-            )
+            counts = next((rec[k] for k in count_keys if k in rec), None)
             if cycle is None or counts is None:
                 continue
             if isinstance(counts, (int, float)):
@@ -606,9 +602,7 @@ def get_output_data(
     for i in range(n_components):
         molar_mass = None
         if unit in ("mg/g", "g/L"):
-            ads = _component_name_from_input(
-                output_dir / "simulation.input", i
-            )
+            ads = _component_name_from_input(output_dir / "simulation.input", i)
             molar_mass = _MOLAR_MASS.get(ads)
             if molar_mass is None:
                 raise ValueError(
