@@ -192,7 +192,9 @@ class TestSetupBatch:
         mapping = json.loads(mapping_path.read_text())
         assert mapping == {"weird.v2": "weird_v2"}
 
-        assert (out_dir / "weird_v2" / "T298.0_P100000" / "weird_v2.cif").exists()
+        assert (
+            out_dir / "weird_v2" / "T298.0_P100000" / "weird_v2.cif"
+        ).exists()
         assert (out_dir / "clean" / "T298.0_P100000" / "clean.cif").exists()
 
     def test_batch_no_mapping_when_all_clean(self, sample_cif, tmp_path):

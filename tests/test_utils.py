@@ -4,7 +4,6 @@ import pytest
 import numpy as np
 from pathlib import Path
 from ase import Atoms
-from ase.io import write as ase_write
 
 from matkit.utils.unitcell_calculator import calculate_cell_size
 from matkit.utils.remove_solvent import remove_solvent
@@ -48,7 +47,7 @@ class TestCalculateCellSize:
         atoms.set_pbc(True)
         small_cutoff = calculate_cell_size(atoms, cutoff=4.0)
         large_cutoff = calculate_cell_size(atoms, cutoff=12.8)
-        assert all(s <= l for s, l in zip(small_cutoff, large_cutoff))
+        assert all(s <= L for s, L in zip(small_cutoff, large_cutoff))
 
     def test_returns_list_of_ints(self):
         """Return type should be a list of integers."""
