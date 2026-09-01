@@ -18,6 +18,8 @@ dependencies = [
 [project.optional-dependencies]
 rdkit = ["rdkit"]
 mlip = ["mace-torch"]
+rootstock = ["rootstock>=1.6,<2"]
+nvalchemi_mace = ["nvalchemi-toolkit[mace]>=0.2,<0.3"]
 plot = ["matplotlib>=3.5"]
 pacmof2 = ["pacmof2"]
 graspa = ["pyyaml>=6.0"]

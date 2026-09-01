@@ -19,7 +19,7 @@ src/matkit/
   raspa3/                   # RASPA2 -> RASPA3 format conversion
   zeopp/                    # Zeo++ pore geometry analysis (wraps network binary)
   tobacco/                  # SMILES -> CIF linker generation for ToBaCCo
-  mlip/                     # MACE-MP ML interatomic potential optimization
+  mlip/                     # Direct, Rootstock, and ALCHEMI MLIP execution
   orca/                     # ORCA quantum chemistry (stub)
   io/                       # File format converters (SMILES, PubChem JSON)
   utils/                    # Shared utilities (unit cell calc, solvent removal, CIF sampling)
@@ -50,7 +50,8 @@ matkit <engine> <action>
 
 - **Language**: Python >= 3.10
 - **Core deps**: ase (atomic simulation), click (CLI), networkx (graph analysis), numpy
-- **Optional deps**: rdkit (SMILES), mace-torch (MLIP), openbabel CLI (obabel)
+- **Optional deps**: rdkit, mace-torch, rootstock, nvalchemi-toolkit,
+  openbabel CLI (obabel)
 - **Build**: setuptools via pyproject.toml (PEP 621)
 - **Linting**: ruff (E, F rules, 80 char line length)
 - **Testing**: pytest (tests/ directory)

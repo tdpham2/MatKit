@@ -9,7 +9,7 @@
 - **RASPA2** -- Classical GCMC simulations
 - **RASPA3** -- Force field format conversion from RASPA2
 - **Zeo++** -- Pore geometry analysis (pore diameters, surface area, volume, channels)
-- **MACE-MP** -- ML interatomic potential geometry/cell optimization
+- **MLIPs** -- direct MACE, Rootstock, and NVIDIA ALCHEMI execution
 - **ORCA** -- Quantum chemistry (planned)
 
 ## Features
@@ -44,6 +44,12 @@ pip install -e ".[rdkit]"
 # For ML interatomic potentials (MACE)
 pip install -e ".[mlip]"
 
+# Lightweight access to cluster-managed Rootstock models
+pip install -e ".[rootstock]"
+
+# NVIDIA ALCHEMI MACE support (install a matching CUDA extra too)
+pip install -e ".[nvalchemi_mace]"
+
 # All optional dependencies
 pip install -e ".[all]"
 
@@ -75,7 +81,41 @@ matkit zeopp run --cif structure.cif --analysis res --analysis sa --radii UFF.ra
 
 # Parse existing Zeo++ output files
 matkit zeopp analyze --path output_dir/
+
+# Run MACE directly through ASE
+matkit mlip run --input structure.cif --backend ase-mace \
+  --checkpoint medium --device cuda --dtype float32
+
+# Run a Rootstock checkpoint already deployed on Polaris
+matkit mlip run --input structure.cif --backend rootstock \
+  --checkpoint mace-mp-0-medium --cluster polaris --device cuda
+
+# Run a native NVIDIA ALCHEMI batch
+matkit mlip run-batch --input-dir cifs --backend nvalchemi-mace \
+  --checkpoint medium --device cuda --batch-size 16
 ```
+
+### GPU examples
+
+[`examples/mlip_gpu.py`](examples/mlip_gpu.py) runs one backend per Python
+process so GPU runtime state is isolated. It accepts one or more ASE-readable
+structure files and writes a manifest plus one JSON result per input.
+
+```bash
+# Direct MACE calculator through ASE
+python examples/mlip_gpu.py --backend ase-mace structure.cif
+
+# Rootstock-managed MACE checkpoint on Polaris
+python examples/mlip_gpu.py --backend rootstock \
+  --cluster polaris --checkpoint mace-mp-0-medium structure.cif
+
+# NVIDIA ALCHEMI MACE with native GPU batching
+python examples/mlip_gpu.py --backend nvalchemi-mace \
+  --checkpoint medium --batch-size 16 structures/*.cif
+```
+
+All three commands force `device="cuda"` and use `float32` where the backend
+exposes a dtype. Pass `--driver opt` for a fixed-cell geometry optimization.
 
 ## Python API
 
@@ -111,6 +151,24 @@ print(result["results"]["sa"])    # {'ASA': 4004.7, 'ASA_m2_g': 3918.3, ...}
 
 # Parse existing Zeo++ output files
 result = get_output_data("output_dir/")
+
+# Agent-free, runtime-selectable MLIP execution
+from matkit.mlip import (
+    ASEMACEConfig,
+    MLIPCalculationConfig,
+    run_mlip,
+)
+
+result = run_mlip(
+    "structure.cif",
+    ASEMACEConfig(
+        checkpoint="medium",
+        device="cuda",
+        dtype="float32",
+    ),
+    MLIPCalculationConfig(driver="energy"),
+    output_file="mace_result.json",
+)
 ```
 
 ## License
