@@ -28,6 +28,50 @@ def _positive_integer(name: str, value: Any) -> None:
         raise ValueError(f"{name} must be at least 1 and an integer")
 
 
+def _validate_explicit_options(
+    backend: str, driver: str, calculator_type: str, provided: set[str]
+) -> None:
+    """Reject explicit frontend options the selected calculation cannot use."""
+    backend_options = {
+        "ase-mace": {"calculator_type", "dispersion"},
+        "rootstock": {
+            "cluster",
+            "root_path",
+            "cache_root",
+            "setup_kwarg",
+            "timeout",
+            "weights",
+        },
+        "nvalchemi-mace": {
+            "dt",
+            "compile_model",
+            "enable_cueq",
+            "batch_size",
+            "max_atoms",
+        },
+    }
+    for owner, names in backend_options.items():
+        for name in sorted(provided & names):
+            if backend != owner:
+                flag = "root" if name == "root_path" else name.replace("_", "-")
+                raise ValueError(f"--{flag} requires --backend {owner}")
+    if "dtype" in provided:
+        if backend == "rootstock":
+            raise ValueError(
+                "--dtype is not supported by Rootstock; use --setup-kwarg "
+                "with precision settings supported by the deployed model"
+            )
+        if backend == "ase-mace" and calculator_type == "mace_anicc":
+            raise ValueError("--dtype is controlled by the mace_anicc factory")
+    if "dispersion" in provided and calculator_type != "mace_mp":
+        raise ValueError("--dispersion requires --calculator-type mace_mp")
+    if driver == "energy":
+        opt_only = provided & {"optimizer", "fmax", "steps", "dt"}
+        if opt_only:
+            flag = sorted(opt_only)[0].replace("_", "-")
+            raise ValueError(f"--{flag} requires --driver opt")
+
+
 @dataclass(frozen=True)
 class ASEMACEConfig:
     """Run a MACE calculator directly through ASE."""

@@ -1143,6 +1143,24 @@ def _build_mlip_configs(options):
         NVAlchemiMACEConfig,
         RootstockConfig,
     )
+    from matkit.mlip.config import _validate_explicit_options
+
+    ctx = click.get_current_context()
+    provided = {
+        name
+        for name in ctx.params
+        if ctx.get_parameter_source(name)
+        not in (
+            None,
+            click.core.ParameterSource.DEFAULT,
+        )
+    }
+    _validate_explicit_options(
+        options["backend"],
+        options["driver"],
+        options["calculator_type"],
+        provided,
+    )
 
     backend_name = options["backend"]
     checkpoint = options["checkpoint"]
@@ -1182,7 +1200,20 @@ def _build_mlip_configs(options):
         fmax=options["fmax"],
         steps=options["steps"],
     )
+    if (
+        backend_name == "nvalchemi-mace"
+        and calculation.driver == "opt"
+        and calculation.optimizer != "fire"
+    ):
+        raise ValueError("NVIDIA ALCHEMI supports only the FIRE optimizer")
     return backend, calculation
+
+
+def _mlip_configs_or_usage_error(options):
+    try:
+        return _build_mlip_configs(options)
+    except ValueError as exc:
+        raise click.BadParameter(str(exc)) from exc
 
 
 @mlip_cli.command("run")
@@ -1205,30 +1236,49 @@ def mlip_run_cmd(input_file, output, **options):
     """Run one MLIP energy calculation or fixed-cell optimization."""
     from matkit.mlip import run_mlip
 
+    backend, calculation = _mlip_configs_or_usage_error(options)
     try:
-        backend, calculation = _build_mlip_configs(options)
         result = run_mlip(
             input_file,
             backend,
             calculation=calculation,
             output_file=output,
         )
-    except (ImportError, OSError, ValueError) as exc:
+    except Exception as exc:
+        click.echo(
+            json.dumps({"status": "failure", "error": str(exc)}, indent=2)
+        )
         raise click.ClickException(str(exc)) from exc
-    if not result["success"]:
-        raise click.ClickException(result["error"])
+    unconverged = (
+        result["success"]
+        and calculation.driver == "opt"
+        and not result["converged"]
+    )
     click.echo(
         json.dumps(
             {
-                "status": "success",
+                "status": (
+                    "failure"
+                    if not result["success"]
+                    else "unconverged"
+                    if unconverged
+                    else "success"
+                ),
                 "energy": result["energy"],
                 "unit": result["energy_unit"],
                 "converged": result["converged"],
                 "output_results_file": str(output),
+                "error": result.get("error", ""),
             },
             indent=2,
         )
     )
+    if not result["success"]:
+        raise click.ClickException(result["error"])
+    if unconverged:
+        raise click.ClickException(
+            "Optimization did not converge; results retained."
+        )
 
 
 @mlip_cli.command("run-batch")
@@ -1257,8 +1307,10 @@ def mlip_run_cmd(input_file, output, **options):
     show_default=True,
     type=click.Path(file_okay=False),
 )
-@click.option("--batch-size", default=16, show_default=True, type=int)
-@click.option("--max-atoms", default=None, type=int)
+@click.option(
+    "--batch-size", default=16, show_default=True, type=click.IntRange(min=1)
+)
+@click.option("--max-atoms", default=None, type=click.IntRange(min=1))
 @_mlip_options
 def mlip_run_batch_cmd(
     input_files,
@@ -1289,8 +1341,8 @@ def mlip_run_batch_cmd(
     else:
         files = list(input_files)
 
+    backend, calculation = _mlip_configs_or_usage_error(options)
     try:
-        backend, calculation = _build_mlip_configs(options)
         summary = run_mlip_batch(
             files,
             backend,
@@ -1299,8 +1351,19 @@ def mlip_run_batch_cmd(
             batch_size=batch_size,
             max_atoms=max_atoms,
         )
-    except (ImportError, OSError, ValueError) as exc:
+    except Exception as exc:
+        click.echo(
+            json.dumps({"status": "failure", "error": str(exc)}, indent=2)
+        )
         raise click.ClickException(str(exc)) from exc
+    unconverged = (
+        sum(
+            result["success"] and not result["converged"]
+            for result in summary["results"]
+        )
+        if calculation.driver == "opt"
+        else 0
+    )
     click.echo(
         json.dumps(
             {
@@ -1309,12 +1372,17 @@ def mlip_run_batch_cmd(
                 "total": summary["total"],
                 "succeeded": summary["succeeded"],
                 "failed": summary["failed"],
+                "unconverged": unconverged,
             },
             indent=2,
         )
     )
-    if summary["status"] == "failure":
-        raise click.ClickException("All MLIP batch items failed.")
+    if summary["failed"] or unconverged:
+        raise click.ClickException(
+            f"MLIP batch: {summary['failed']} failed, "
+            f"{unconverged} unconverged; "
+            "available results retained."
+        )
 
 
 @mlip_cli.command("mace-opt")
