@@ -75,7 +75,11 @@ class UMABatchResult(TypedDict):
     error_message: Optional[str]
 
 
-class MLIPResult(TypedDict):
+class _MLIPArtifacts(TypedDict, total=False):
+    output_results_file: str
+
+
+class MLIPResult(_MLIPArtifacts):
     """Runtime-neutral result from ``matkit.mlip.run_mlip``."""
 
     schema_version: int
@@ -109,6 +113,9 @@ class MLIPBatchSummary(TypedDict):
     total: int
     succeeded: int
     failed: int
+    pending: int
+    unconverged: int
+    error: str
     items: list[dict]
     manifest_file: str
     results: list[MLIPResult]

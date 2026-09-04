@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
+import tempfile
 import time
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
-from typing import Any, Iterator, Sequence
+from typing import Any, Callable, Iterator, Sequence
 
 import numpy as np
 from ase.calculators.calculator import PropertyNotImplementedError
@@ -21,6 +24,9 @@ from matkit.mlip.config import (
     _positive_integer,
 )
 from matkit.types import MLIPBatchSummary, MLIPResult
+
+logger = logging.getLogger(__name__)
+_ResultCallback = Callable[[int, dict[str, Any]], None]
 
 
 def _finite_array(name: str, value, shape: tuple[int, ...]) -> np.ndarray:
@@ -233,7 +239,9 @@ def _run_ase_item(
     calculation: MLIPCalculationConfig,
 ) -> dict[str, Any]:
     atoms.calc = calculator
-    _synchronize_device(backend.device)
+    # Rootstock's synchronous worker owns the GPU and its dependencies.
+    if isinstance(backend, ASEMACEConfig):
+        _synchronize_device(backend.device)
     started = time.perf_counter()
     converged = True
     n_steps = 0
@@ -247,7 +255,8 @@ def _run_ase_item(
     energy = atoms.get_potential_energy()
     forces = atoms.get_forces()
     stress = _optional_stress(atoms)
-    _synchronize_device(backend.device)
+    if isinstance(backend, ASEMACEConfig):
+        _synchronize_device(backend.device)
     elapsed = time.perf_counter() - started
     return _success_result(
         input_file,
@@ -398,10 +407,15 @@ def _run_nvalchemi_chunk(
             set() if indices is None else set(indices.detach().cpu().tolist())
         )
 
-    return [
-        (
-            original_index,
-            _nvalchemi_result(
+    data_items = batch.to_data_list()
+    if len(data_items) != len(entries):
+        raise RuntimeError("ALCHEMI returned a different number of structures")
+    results = []
+    for chunk_index, ((original_index, input_file, atoms), data) in enumerate(
+        zip(entries, data_items)
+    ):
+        try:
+            result = _nvalchemi_result(
                 input_file,
                 atoms,
                 data,
@@ -409,12 +423,17 @@ def _run_nvalchemi_chunk(
                 calculation,
                 chunk_index in converged_indices,
                 started,
-            ),
-        )
-        for chunk_index, ((original_index, input_file, atoms), data) in (
-            enumerate(zip(entries, batch.to_data_list()))
-        )
-    ]
+            )
+        except Exception as exc:
+            result = _failure_result(
+                input_file,
+                backend,
+                calculation,
+                exc,
+                time.perf_counter() - started,
+            )
+        results.append((original_index, result))
+    return results
 
 
 def _chunks_by_capacity(
@@ -445,6 +464,7 @@ def _read_inputs(
     input_files: Sequence[str | Path],
     backend: MLIPBackendConfig,
     calculation: MLIPCalculationConfig,
+    on_result: _ResultCallback | None = None,
 ) -> tuple[list[tuple[int, str, Any]], list[dict[str, Any] | None]]:
     prepared = []
     results: list[dict[str, Any] | None] = [None] * len(input_files)
@@ -462,16 +482,20 @@ def _read_inputs(
             results[index] = _failure_result(
                 input_file, backend, calculation, exc
             )
+            results[index]["setup_time_s"] = 0.0
+        # Persistence errors must escape, not become calculation failures.
+        if results[index] is not None and on_result is not None:
+            on_result(index, results[index])
     return prepared, results
 
 
-def _execute_inputs(
+def _validate_execution_request(
     input_files: Sequence[str | Path],
     backend: MLIPBackendConfig,
     calculation: MLIPCalculationConfig,
     batch_size: int,
     max_atoms: int | None,
-) -> tuple[list[dict[str, Any]], float]:
+) -> None:
     if not input_files:
         raise ValueError("At least one input structure file is required")
     _positive_integer("batch_size", batch_size)
@@ -484,19 +508,52 @@ def _execute_inputs(
     ):
         raise ValueError("NVIDIA ALCHEMI supports only the FIRE optimizer")
 
-    prepared, results = _read_inputs(input_files, backend, calculation)
+
+def _execute_inputs(
+    input_files: Sequence[str | Path],
+    backend: MLIPBackendConfig,
+    calculation: MLIPCalculationConfig,
+    batch_size: int,
+    max_atoms: int | None,
+    on_result: _ResultCallback | None = None,
+) -> tuple[list[dict[str, Any]], float]:
+    _validate_execution_request(
+        input_files, backend, calculation, batch_size, max_atoms
+    )
+    prepared, results = _read_inputs(
+        input_files, backend, calculation, on_result
+    )
     if not prepared:
         return [result for result in results if result is not None], 0.0
 
+    def complete(index, result):
+        result["setup_time_s"] = setup_time
+        results[index] = result
+        if on_result is not None:
+            on_result(index, result)
+
     setup_started = time.perf_counter()
     if isinstance(backend, (ASEMACEConfig, RootstockConfig)):
-        try:
-            with _ase_backend_context(backend) as calculator:
-                _synchronize_device(backend.device)
+        # Only startup failures apply to every prepared item. Body/teardown
+        # errors must not replace already committed results.
+        with ExitStack() as stack:
+            try:
+                calculator = stack.enter_context(_ase_backend_context(backend))
+                if isinstance(backend, ASEMACEConfig):
+                    _synchronize_device(backend.device)
+            except Exception as exc:
+                setup_time = time.perf_counter() - setup_started
+                for index, input_file, _ in prepared:
+                    complete(
+                        index,
+                        _failure_result(input_file, backend, calculation, exc),
+                    )
+            else:
                 setup_time = time.perf_counter() - setup_started
                 for index, input_file, atoms in prepared:
+                    item_started = time.perf_counter()
                     try:
-                        results[index] = _run_ase_item(
+                        result = _run_ase_item(
                             input_file,
                             atoms,
                             calculator,
@@ -504,43 +561,55 @@ def _execute_inputs(
                             calculation,
                         )
                     except Exception as exc:
-                        results[index] = _failure_result(
-                            input_file, backend, calculation, exc
+                        result = _failure_result(
+                            input_file,
+                            backend,
+                            calculation,
+                            exc,
+                            time.perf_counter() - item_started,
                         )
-        except Exception as exc:
-            setup_time = time.perf_counter() - setup_started
-            for index, input_file, _ in prepared:
-                results[index] = _failure_result(
-                    input_file, backend, calculation, exc
-                )
+                    complete(index, result)
     else:
         try:
             model = _load_nvalchemi_model(backend)
             _synchronize_device(backend.device)
+        except Exception as exc:
+            setup_time = time.perf_counter() - setup_started
+            for index, input_file, _ in prepared:
+                complete(
+                    index,
+                    _failure_result(input_file, backend, calculation, exc),
+                )
+        else:
             setup_time = time.perf_counter() - setup_started
             for chunk in _chunks_by_capacity(prepared, batch_size, max_atoms):
+                chunk_started = time.perf_counter()
                 try:
                     chunk_results = _run_nvalchemi_chunk(
                         model, chunk, backend, calculation
                     )
-                    if len(chunk_results) != len(chunk):
+                    if [index for index, _ in chunk_results] != [
+                        index for index, _, _ in chunk
+                    ]:
                         raise RuntimeError(
-                            "NVIDIA ALCHEMI returned a different number of "
-                            "results than input structures."
+                            "ALCHEMI returned inconsistent result indices."
                         )
-                    for index, result in chunk_results:
-                        results[index] = result
                 except Exception as exc:
-                    for index, input_file, _ in chunk:
-                        results[index] = _failure_result(
-                            input_file, backend, calculation, exc
+                    chunk_results = [
+                        (
+                            index,
+                            _failure_result(
+                                input_file,
+                                backend,
+                                calculation,
+                                exc,
+                                time.perf_counter() - chunk_started,
+                            ),
                         )
-        except Exception as exc:
-            setup_time = time.perf_counter() - setup_started
-            for index, input_file, _ in prepared:
-                results[index] = _failure_result(
-                    input_file, backend, calculation, exc
-                )
+                        for index, input_file, _ in chunk
+                    ]
+                for index, result in chunk_results:
+                    complete(index, result)
 
     final_results = []
     for result in results:
@@ -551,10 +620,27 @@ def _execute_inputs(
 
 
 def _write_json(path: Path, data: dict[str, Any]) -> str:
+    """Commit strict JSON with atomic replacement on the same filesystem."""
+    encoded = json.dumps(data, indent=2, allow_nan=False)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(data, indent=2, allow_nan=False), encoding="utf-8"
-    )
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(encoded)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
     return str(path.resolve())
 
 
@@ -566,16 +652,40 @@ def run_mlip(
 ) -> MLIPResult:
     """Run one energy calculation or fixed-cell optimization."""
     calculation = calculation or MLIPCalculationConfig()
-    results, setup_time = _execute_inputs(
-        [input_file], backend, calculation, batch_size=1, max_atoms=None
-    )
-    result = results[0]
-    result["setup_time_s"] = setup_time
-    if output_file is not None:
+
+    def persist(_index, result):
         path = Path(output_file).expanduser().resolve()
         result["output_results_file"] = str(path)
         _write_json(path, result)
+
+    results, _ = _execute_inputs(
+        [input_file],
+        backend,
+        calculation,
+        batch_size=1,
+        max_atoms=None,
+        on_result=persist if output_file is not None else None,
+    )
+    result = results[0]
     return result
+
+
+@contextmanager
+def _fresh_batch_directory(output_path: Path):
+    """Claim a batch directory without racing another MatKit writer."""
+    output_path.mkdir(parents=True, exist_ok=True)
+    lock = output_path / ".matkit_batch.lock"
+    with lock.open("x"):
+        pass
+    try:
+        if (output_path / "batch_manifest.json").exists():
+            raise FileExistsError(
+                f"Batch manifest already exists in {output_path}; "
+                "use a fresh directory (resume is not supported yet)."
+            )
+        yield
+    finally:
+        lock.unlink(missing_ok=True)
 
 
 def run_mlip_batch(
@@ -586,58 +696,111 @@ def run_mlip_batch(
     batch_size: int = 16,
     max_atoms: int | None = None,
 ) -> MLIPBatchSummary:
-    """Run an ordered MLIP batch and persist results plus a manifest."""
-    calculation = calculation or MLIPCalculationConfig()
-    started = time.perf_counter()
-    output_path = Path(output_dir).expanduser()
-    output_path.mkdir(parents=True, exist_ok=True)
-    results, setup_time = _execute_inputs(
-        input_files,
-        backend,
-        calculation,
-        batch_size=batch_size,
-        max_atoms=max_atoms,
-    )
+    """Persist each completed item; require a fresh batch directory.
 
+    Execution status and optimization convergence are independent. A completed
+    batch can have unconverged results. Catchable orchestration errors persist
+    an interrupted manifest and propagate; completed results remain available.
+    """
+    calculation = calculation or MLIPCalculationConfig()
+    _validate_execution_request(
+        input_files, backend, calculation, batch_size, max_atoms
+    )
+    started = time.perf_counter()
+    output_path = Path(output_dir).expanduser().resolve()
     items = []
-    for index, result in enumerate(results):
-        stem = Path(result["input_structure_file"]).stem
-        result_path = output_path / f"{index:05d}_{stem}.json"
-        result["setup_time_s"] = setup_time
-        result_file = _write_json(result_path, result)
+    for index, value in enumerate(input_files):
+        path = Path(value).expanduser().resolve()
         items.append(
             {
                 "index": index,
-                "input_structure_file": result["input_structure_file"],
-                "status": "success" if result["success"] else "failure",
-                "result_file": result_file,
-                "error": result["error"],
+                "input_structure_file": str(path),
+                "status": "pending",
+                "converged": None,
+                "result_file": str(
+                    output_path / f"{index:05d}_{path.stem}.json"
+                ),
+                "error": "",
             }
         )
-
-    succeeded = sum(item["status"] == "success" for item in items)
-    failed = len(items) - succeeded
-    if items and failed == 0:
-        status = "completed"
-    elif succeeded:
-        status = "partial"
-    else:
-        status = "failure"
     manifest = {
         "schema_version": 1,
-        "status": status,
+        "status": "running",
         "backend_info": backend.to_dict(),
         "calculation_input": calculation.to_dict(),
-        "setup_time_s": setup_time,
-        "wall_time_s": time.perf_counter() - started,
+        "setup_time_s": 0.0,
+        "wall_time_s": 0.0,
         "total": len(items),
-        "succeeded": succeeded,
-        "failed": failed,
+        "succeeded": 0,
+        "failed": 0,
+        "pending": len(items),
+        "unconverged": 0,
+        "error": "",
         "items": items,
     }
-    manifest_file = _write_json(output_path / "batch_manifest.json", manifest)
+    manifest_path = output_path / "batch_manifest.json"
+
+    def checkpoint(status):
+        manifest["status"] = status
+        for key, state in (
+            ("succeeded", "success"),
+            ("failed", "failure"),
+            ("pending", "pending"),
+        ):
+            manifest[key] = sum(item["status"] == state for item in items)
+        manifest["unconverged"] = (
+            sum(
+                item["status"] == "success" and item["converged"] is False
+                for item in items
+            )
+            if calculation.driver == "opt"
+            else 0
+        )
+        manifest["wall_time_s"] = time.perf_counter() - started
+        _write_json(manifest_path, manifest)
+
+    def persist(index, result):
+        item = items[index]
+        result["output_results_file"] = item["result_file"]
+        _write_json(Path(item["result_file"]), result)
+        item.update(
+            status="success" if result["success"] else "failure",
+            converged=result["converged"] if result["success"] else None,
+            error=result["error"],
+        )
+        manifest["setup_time_s"] = max(
+            manifest["setup_time_s"], result["setup_time_s"]
+        )
+        checkpoint("running")
+
+    with _fresh_batch_directory(output_path):
+        try:
+            checkpoint("running")
+            results, setup_time = _execute_inputs(
+                input_files,
+                backend,
+                calculation,
+                batch_size,
+                max_atoms,
+                on_result=persist,
+            )
+            manifest["setup_time_s"] = setup_time
+            if manifest["failed"] == 0:
+                status = "completed"
+            elif manifest["succeeded"]:
+                status = "partial"
+            else:
+                status = "failure"
+            checkpoint(status)
+        except BaseException as exc:
+            manifest["error"] = str(exc) or type(exc).__name__
+            try:
+                checkpoint("interrupted")
+            except Exception:
+                logger.exception("Could not persist interrupted batch manifest")
+            raise
     return {
         **manifest,
-        "manifest_file": manifest_file,
+        "manifest_file": str(manifest_path),
         "results": results,
     }
