@@ -3,11 +3,29 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+import json
+import math
+from numbers import Integral, Real
 from typing import Any, Literal, TypeAlias
 
 
 _DTYPES = {"float32", "float64"}
 _OPTIMIZERS = {"bfgs", "lbfgs", "gpmin", "fire", "mdmin"}
+
+
+def _positive_number(name: str, value: Any) -> None:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, Real)
+        or not math.isfinite(value)
+        or value <= 0
+    ):
+        raise ValueError(f"{name} must be positive and finite")
+
+
+def _positive_integer(name: str, value: Any) -> None:
+    if isinstance(value, bool) or not isinstance(value, Integral) or value < 1:
+        raise ValueError(f"{name} must be at least 1 and an integer")
 
 
 @dataclass(frozen=True)
@@ -37,8 +55,7 @@ class ASEMACEConfig:
             raise ValueError(
                 f"Unsupported MACE calculator type: {self.calculator_type}"
             )
-        if self.dispersion_cutoff <= 0:
-            raise ValueError("dispersion_cutoff must be positive")
+        _positive_number("dispersion_cutoff", self.dispersion_cutoff)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -63,8 +80,13 @@ class RootstockConfig:
             raise ValueError("checkpoint must not be empty")
         if self.cluster is not None and self.root is not None:
             raise ValueError("Rootstock cannot specify both cluster and root")
-        if self.timeout <= 0:
-            raise ValueError("timeout must be positive")
+        _positive_number("timeout", self.timeout)
+        try:
+            json.dumps(self.setup_kwargs, allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "setup_kwargs must contain finite JSON data"
+            ) from exc
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -89,8 +111,7 @@ class NVAlchemiMACEConfig:
             raise ValueError("checkpoint must not be empty")
         if self.dtype not in _DTYPES:
             raise ValueError(f"Unsupported dtype: {self.dtype}")
-        if self.dt <= 0:
-            raise ValueError("dt must be positive")
+        _positive_number("dt", self.dt)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -115,10 +136,8 @@ class MLIPCalculationConfig:
             raise ValueError(f"Unsupported MLIP driver: {self.driver}")
         if self.optimizer not in _OPTIMIZERS:
             raise ValueError(f"Unsupported ASE optimizer: {self.optimizer}")
-        if self.fmax <= 0:
-            raise ValueError("fmax must be positive")
-        if self.steps < 1:
-            raise ValueError("steps must be at least 1")
+        _positive_number("fmax", self.fmax)
+        _positive_integer("steps", self.steps)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

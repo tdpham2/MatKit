@@ -104,6 +104,7 @@ def test_run_mlip_energy_writes_runtime_neutral_result(tmp_path, monkeypatch):
     assert result["stress"] is None
     assert result["n_steps"] == 0
     stored = json.loads(output_file.read_text())
+    assert stored == result
     assert stored["backend_info"]["type"] == "ase-mace"
     assert stored["final_structure"]["atomic_numbers"] == [29, 29]
 
@@ -264,6 +265,7 @@ def test_nvalchemi_loads_once_and_chunks_in_order(tmp_path, monkeypatch):
 
     monkeypatch.setattr(mlip_runner, "_load_nvalchemi_model", load_model)
     monkeypatch.setattr(mlip_runner, "_run_nvalchemi_chunk", run_chunk)
+    monkeypatch.setattr(mlip_runner, "_synchronize_device", lambda _: None)
     summary = run_mlip_batch(
         input_files,
         NVAlchemiMACEConfig(checkpoint="medium"),

@@ -8,6 +8,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Sequence
 
+import numpy as np
+from ase.calculators.calculator import PropertyNotImplementedError
 from ase.io import read as ase_read
 
 from matkit.mlip.config import (
@@ -16,8 +18,28 @@ from matkit.mlip.config import (
     MLIPCalculationConfig,
     NVAlchemiMACEConfig,
     RootstockConfig,
+    _positive_integer,
 )
 from matkit.types import MLIPBatchSummary, MLIPResult
+
+
+def _finite_array(name: str, value, shape: tuple[int, ...]) -> np.ndarray:
+    array = np.asarray(value, dtype=float)
+    if array.shape != shape or not np.isfinite(array).all():
+        raise ValueError(f"{name} must have shape {shape} and finite values")
+    return array
+
+
+def _validate_atoms(atoms) -> None:
+    if not len(atoms):
+        raise ValueError("Structure must contain at least one atom")
+    _finite_array("positions", atoms.positions, (len(atoms), 3))
+    cell = _finite_array("cell", atoms.cell.array, (3, 3))
+    periodic = cell[atoms.pbc]
+    if len(periodic) and np.linalg.matrix_rank(periodic) != len(periodic):
+        raise ValueError(
+            "Periodic cell vectors must be nonzero and independent"
+        )
 
 
 def _atoms_payload(atoms) -> dict[str, Any]:
@@ -35,19 +57,18 @@ def _optional_stress(atoms):
         return None
     try:
         return atoms.get_stress(voigt=False)
-    except Exception:
+    except PropertyNotImplementedError:
         return None
 
 
 def _synchronize_device(device: str) -> None:
     if not device.startswith("cuda"):
         return
-    try:
-        import torch
+    import torch
 
-        torch.cuda.synchronize(torch.device(device))
-    except (ImportError, RuntimeError, ValueError):
-        return
+    if not torch.cuda.is_available():
+        raise RuntimeError(f"CUDA is unavailable for requested device {device}")
+    torch.cuda.synchronize(torch.device(device))
 
 
 def _create_mace_calculator(config: ASEMACEConfig):
@@ -152,6 +173,11 @@ def _success_result(
     n_steps: int | None,
     calculation_time: float,
 ) -> dict[str, Any]:
+    _validate_atoms(atoms)
+    energy = _finite_array("energy", energy, ()).item()
+    forces = _finite_array("forces", forces, (len(atoms), 3))
+    if stress is not None:
+        stress = _finite_array("stress", stress, (3, 3))
     return {
         "schema_version": 1,
         "success": True,
@@ -211,7 +237,7 @@ def _run_ase_item(
     started = time.perf_counter()
     converged = True
     n_steps = 0
-    if calculation.driver == "opt" and len(atoms) > 1:
+    if calculation.driver == "opt":
         optimizer = _optimizer_class(calculation.optimizer)(atoms, logfile=None)
         converged = bool(
             optimizer.run(fmax=calculation.fmax, steps=calculation.steps)
@@ -300,13 +326,18 @@ def _nvalchemi_result(
     if data.pbc is not None:
         final_atoms.pbc = data.pbc.squeeze(0).detach().cpu().numpy()
 
-    energy = data.energy.detach().cpu().reshape(-1)[0].item()
+    energy_values = data.energy.detach().cpu().numpy()
+    if energy_values.size != 1:
+        raise ValueError("ALCHEMI must return one energy per structure")
+    energy = energy_values.reshape(()).item()
     forces = None
     if data.forces is not None:
         forces = data.forces.detach().cpu().numpy()
     stress = None
     if data.stress is not None:
-        stress = data.stress.detach().cpu().reshape(-1, 3, 3)[0].numpy()
+        stress = data.stress.detach().cpu().numpy()
+        if stress.shape == (1, 3, 3):
+            stress = stress[0]
     return _success_result(
         input_file,
         backend,
@@ -424,7 +455,9 @@ def _read_inputs(
                 raise FileNotFoundError(
                     f"Input structure file does not exist: {value}"
                 )
-            prepared.append((index, input_file, ase_read(input_file)))
+            atoms = ase_read(input_file)
+            _validate_atoms(atoms)
+            prepared.append((index, input_file, atoms))
         except Exception as exc:
             results[index] = _failure_result(
                 input_file, backend, calculation, exc
@@ -441,12 +474,12 @@ def _execute_inputs(
 ) -> tuple[list[dict[str, Any]], float]:
     if not input_files:
         raise ValueError("At least one input structure file is required")
-    if batch_size < 1:
-        raise ValueError("batch_size must be at least 1")
-    if max_atoms is not None and max_atoms < 1:
-        raise ValueError("max_atoms must be at least 1")
+    _positive_integer("batch_size", batch_size)
+    if max_atoms is not None:
+        _positive_integer("max_atoms", max_atoms)
     if (
         isinstance(backend, NVAlchemiMACEConfig)
+        and calculation.driver == "opt"
         and calculation.optimizer != "fire"
     ):
         raise ValueError("NVIDIA ALCHEMI supports only the FIRE optimizer")
@@ -519,7 +552,9 @@ def _execute_inputs(
 
 def _write_json(path: Path, data: dict[str, Any]) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    path.write_text(
+        json.dumps(data, indent=2, allow_nan=False), encoding="utf-8"
+    )
     return str(path.resolve())
 
 
@@ -537,9 +572,9 @@ def run_mlip(
     result = results[0]
     result["setup_time_s"] = setup_time
     if output_file is not None:
-        result["output_results_file"] = _write_json(
-            Path(output_file).expanduser(), result
-        )
+        path = Path(output_file).expanduser().resolve()
+        result["output_results_file"] = str(path)
+        _write_json(path, result)
     return result
 
 
