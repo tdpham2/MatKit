@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from concurrent.futures import ThreadPoolExecutor
 import json
+import math
+from numbers import Integral, Real
 from pathlib import Path
 import shutil
 import subprocess
@@ -14,6 +16,61 @@ logger = logging.getLogger(__name__)
 
 
 VALID_ANALYSES = {"res", "sa", "vol", "psd", "chan"}
+_OUTPUT_SUFFIXES = {analysis: (f".{analysis}",) for analysis in VALID_ANALYSES}
+# Zeo++ uses this suffix by default; retain explicitly named legacy files.
+_OUTPUT_SUFFIXES["psd"] = (".psd_histo", ".psd")
+
+
+def _analysis_arguments(
+    analyses,
+    probe_radius,
+    channel_radius,
+    num_samples,
+    high_accuracy,
+    radii_file,
+    structure_file,
+):
+    """Build the engine syntax shared by legacy and unified execution."""
+    if not analyses or set(analyses) - VALID_ANALYSES:
+        raise ValueError(f"Invalid analysis types: {analyses}")
+    if len(set(analyses)) != len(analyses):
+        raise ValueError("Analyses must be unique")
+    for name, value in (
+        ("probe_radius", probe_radius),
+        ("channel_radius", channel_radius),
+    ):
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, Real)
+            or not math.isfinite(value)
+            or value <= 0
+        ):
+            raise ValueError(f"{name} must be positive and finite")
+    if (
+        isinstance(num_samples, bool)
+        or not isinstance(num_samples, Integral)
+        or num_samples < 1
+    ):
+        raise ValueError("num_samples must be a positive integer")
+    sampled = {"sa", "vol", "psd"}
+    if sampled.intersection(analyses) and probe_radius > channel_radius:
+        raise ValueError("probe_radius must not exceed channel_radius")
+    args = ["-ha"] if high_accuracy else []
+    args.extend(["-r", str(radii_file)])
+    for analysis in analyses:
+        args.append(f"-{analysis}")
+        if analysis in sampled:
+            args.extend(map(str, (channel_radius, probe_radius, num_samples)))
+        elif analysis == "chan":
+            args.append(str(probe_radius))
+    return [*args, str(structure_file)]
+
+
+def _output_path(directory: Path, stem: str, analysis: str) -> Path:
+    candidates = [
+        directory / f"{stem}{suffix}" for suffix in _OUTPUT_SUFFIXES[analysis]
+    ]
+    return next((path for path in candidates if path.is_file()), candidates[0])
 
 
 def _find_network_binary(network_path: str | None = None) -> str:
@@ -181,16 +238,34 @@ def _parse_psd(filepath: Path) -> dict:
         counts = []
         for line in lines:
             parts = line.strip().split()
-            if len(parts) >= 2:
-                try:
-                    low = float(parts[0])
-                    count = float(parts[1])
-                    bin_lower.append(low)
-                    counts.append(count)
-                except ValueError:
-                    continue
+            if not parts:
+                continue
+            try:
+                low = float(parts[0])
+            except ValueError:
+                continue  # Zeo++ histogram headers are not numeric rows.
+            if len(parts) < 2:
+                raise ValueError("Incomplete PSD histogram row")
+            values = [float(value) for value in parts]
+            if not all(math.isfinite(value) for value in values):
+                raise ValueError("PSD histogram values must be finite")
+            count = values[1]
+            if low < 0 or count < 0:
+                raise ValueError("PSD bins and counts must be nonnegative")
+            if bin_lower and low <= bin_lower[-1]:
+                raise ValueError("PSD bins must be strictly increasing")
+            bin_lower.append(low)
+            counts.append(count)
+
+        if not counts:
+            raise ValueError("Empty pore-size distribution")
 
         bin_size = bin_lower[1] - bin_lower[0] if len(bin_lower) > 1 else 0.0
+        if any(
+            not math.isclose(b - a, bin_size, rel_tol=1e-6, abs_tol=1e-9)
+            for a, b in zip(bin_lower, bin_lower[1:])
+        ):
+            raise ValueError("PSD histogram requires uniformly spaced bins")
         bin_upper = [b + bin_size for b in bin_lower]
 
         return {
@@ -215,12 +290,41 @@ def _parse_chan(filepath: Path) -> dict:
         Dict with num_channels and dimensionalities list.
     """
     try:
-        text = filepath.read_text().strip()
-        parts = text.split()
+        lines = [
+            line.strip()
+            for line in filepath.read_text().splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        parts = lines[0].split()
         channels_idx = parts.index("channels")
         num_channels = int(parts[channels_idx - 1])
         dim_idx = parts.index("dimensionality")
         dimensionalities = [int(d) for d in parts[dim_idx + 1 :]]
+        if (
+            num_channels < 0
+            or num_channels != len(dimensionalities)
+            or any(d not in {1, 2, 3} for d in dimensionalities)
+            or parts[channels_idx + 1 : dim_idx] != ["identified", "of"]
+        ):
+            raise ValueError("Invalid channel count or dimensionalities")
+        channels = set()
+        for line in lines[1:]:
+            row = line.split()
+            if row[0] != "Channel":
+                continue  # Optional summary rows do not list dimensionalities.
+            if len(row) != 5:
+                raise ValueError("Incomplete channel detail row")
+            index = int(row[1])
+            diameters = [float(value) for value in row[2:]]
+            if index in channels or not 0 <= index < num_channels:
+                raise ValueError("Invalid or duplicate channel index")
+            if any(not math.isfinite(d) or d < 0 for d in diameters):
+                raise ValueError(
+                    "Channel diameters must be finite and nonnegative"
+                )
+            channels.add(index)
+        if channels and len(channels) != num_channels:
+            raise ValueError("Incomplete channel detail rows")
         return {
             "num_channels": num_channels,
             "dimensionalities": dimensionalities,
@@ -238,6 +342,25 @@ _PARSERS = {
 }
 
 
+def _parse_output(path: Path, analysis: str) -> dict:
+    """Require complete, finite results in every public Zeo++ interface."""
+    required = {
+        "res": {"Di", "Df", "Dif"},
+        "sa": {"ASA", "NASA", "density", "unitcell_volume"},
+        "vol": {"AV", "NAV", "density", "unitcell_volume"},
+        "psd": {"bin_lower", "counts"},
+        "chan": {"num_channels", "dimensionalities"},
+    }
+    data = _PARSERS[analysis](path)
+    if not required[analysis] <= data.keys():
+        raise ValueError(f"Incomplete requested Zeo++ analysis: {analysis}")
+    try:
+        json.dumps(data, allow_nan=False)
+    except ValueError as exc:
+        raise ValueError(f"Nonfinite Zeo++ analysis: {analysis}") from exc
+    return data
+
+
 def get_output_data(
     output_path: str,
     analyses: list[str] | None = None,
@@ -247,7 +370,7 @@ def get_output_data(
     Args:
         output_path: Path to directory containing Zeo++ output files.
         analyses: Which analyses to parse. If None, auto-detects from
-            available files (.res, .sa, .vol, .psd, .chan).
+            available files (.res, .sa, .vol, .psd_histo, .psd, .chan).
 
     Returns:
         Dict with 'success' key and per-analysis result sub-dicts.
@@ -271,17 +394,27 @@ def get_output_data(
 
     if outdir.is_file():
         ext = outdir.suffix.lstrip(".")
+        if ext == "psd_histo":
+            ext = "psd"
+        if analyses is not None and set(analyses) != {ext}:
+            raise ValueError("File does not contain all requested analyses")
         if ext in _PARSERS:
-            results[ext] = _PARSERS[ext](outdir)
+            results[ext] = _parse_output(outdir, ext)
             results["success"] = True
         return results
 
     # Directory mode: find output files
     detect = analyses if analyses is not None else list(VALID_ANALYSES)
     for analysis in detect:
-        matches = list(outdir.glob(f"*.{analysis}"))
+        matches = [
+            path
+            for suffix in _OUTPUT_SUFFIXES[analysis]
+            for path in sorted(outdir.glob(f"*{suffix}"))
+        ]
         if matches:
-            results[analysis] = _PARSERS[analysis](matches[0])
+            results[analysis] = _parse_output(matches[0], analysis)
+        elif analyses is not None:
+            raise ValueError(f"Missing requested Zeo++ analysis: {analysis}")
 
     if len(results) > 1:  # has at least one analysis result beyond 'success'
         results["success"] = True
@@ -367,47 +500,18 @@ def run_zeopp(
         rad_dest = workdir / radii_path.name
         shutil.copy(radii_path, rad_dest)
 
-        # Build command
-        cmd = [binary]
-
-        if ha:
-            cmd.append("-ha")
-
-        cmd.extend(["-r", str(rad_dest)])
-
-        for analysis in analyses:
-            if analysis == "res":
-                cmd.extend(["-res"])
-            elif analysis == "sa":
-                cmd.extend(
-                    [
-                        "-sa",
-                        str(probe_radius),
-                        str(chan_radius),
-                        str(num_samples),
-                    ]
-                )
-            elif analysis == "vol":
-                cmd.extend(
-                    [
-                        "-vol",
-                        str(probe_radius),
-                        str(chan_radius),
-                        str(num_samples),
-                    ]
-                )
-            elif analysis == "psd":
-                cmd.extend(
-                    [
-                        "-psd",
-                        str(probe_radius),
-                        str(chan_radius),
-                        str(num_samples),
-                    ]
-                )
-            elif analysis == "chan":
-                cmd.extend(["-chan", str(probe_radius)])
-        cmd.append(str(cif_dest))
+        cmd = [
+            binary,
+            *_analysis_arguments(
+                analyses,
+                probe_radius,
+                chan_radius,
+                num_samples,
+                ha,
+                rad_dest,
+                cif_dest,
+            ),
+        ]
 
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
@@ -420,9 +524,12 @@ def run_zeopp(
         result = {"success": False, "results": {}, "error": None}
         stem = cif_dest.stem
         for analysis in analyses:
-            out_file = workdir / f"{stem}.{analysis}"
-            if out_file.exists():
-                result["results"][analysis] = _PARSERS[analysis](out_file)
+            out_file = _output_path(workdir, stem, analysis)
+            if not out_file.is_file():
+                raise ValueError(
+                    f"Missing requested Zeo++ analysis: {analysis}"
+                )
+            result["results"][analysis] = _parse_output(out_file, analysis)
 
         result["success"] = len(result["results"]) > 0
         return result

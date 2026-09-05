@@ -289,47 +289,30 @@ def external_command(root, execution, engine, arguments):
 
 
 def run_pores(root, request, execution):
-    args = ["-ha"] if request.high_accuracy else []
-    args.extend(["-r", request.radii_file])
-    for analysis in request.analyses:
-        args.append(f"-{analysis}")
-        if analysis in {"sa", "vol", "psd"}:
-            args.extend(
-                [
-                    str(request.probe_radius),
-                    str(request.channel_radius),
-                    str(request.num_samples),
-                ]
-            )
-        elif analysis == "chan":
-            args.append(str(request.probe_radius))
-    args.append("structure.cif")
+    from matkit.zeopp.zeopp import _analysis_arguments
+
+    args = _analysis_arguments(
+        request.analyses,
+        request.probe_radius,
+        request.channel_radius,
+        request.num_samples,
+        request.high_accuracy,
+        request.radii_file,
+        "structure.cif",
+    )
     external_command(root, execution, "zeopp", args)
     return parse_pores(root, request)
 
 
 def parse_pores(root, request):
-    from matkit.zeopp.zeopp import _PARSERS
+    from matkit.zeopp.zeopp import _output_path, _parse_output
 
-    required = {
-        "res": {"Di", "Df", "Dif"},
-        "sa": {"ASA", "NASA", "density", "unitcell_volume"},
-        "vol": {"AV", "NAV", "density", "unitcell_volume"},
-        "psd": {"bin_lower", "counts"},
-        "chan": {"num_channels", "dimensionalities"},
+    results = {
+        analysis: _parse_output(
+            _output_path(root / "work", "structure", analysis), analysis
+        )
+        for analysis in request.analyses
     }
-    results = {}
-    for analysis in request.analyses:
-        data = _PARSERS[analysis](root / "work" / f"structure.{analysis}")
-        if not required[analysis] <= data.keys():
-            raise ValueError(f"Incomplete requested Zeo++ analysis: {analysis}")
-        if analysis == "psd" and not data["counts"]:
-            raise ValueError("Empty pore-size distribution")
-        if analysis == "chan" and data["num_channels"] != len(
-            data["dimensionalities"]
-        ):
-            raise ValueError("Channel count does not match dimensionalities")
-        results[analysis] = data
     return (
         PorePayload(results=results),
         [
