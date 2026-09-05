@@ -101,5 +101,7 @@ downloads, external engines, live endpoints, and GPUs explicitly.
 
 ## Status
 
-Roadmap implementation has not started. PR #14 hardening is the immediate work.
-No GPU capability has been promoted on the basis of this review or plan alone.
+Roadmap implementation has not started. PR #14 hardening is complete at
+implementation commit `28e764f`; its handoff records 259 passing CPU tests and
+one skip. Check the PR's current head and merge state before beginning milestone
+1. No GPU capability has been promoted on the basis of this implementation.

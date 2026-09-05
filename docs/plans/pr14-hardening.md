@@ -21,16 +21,16 @@ the independent growth plan is [matkit-roadmap.md](matkit-roadmap.md).
 
 ## Implementation checklist
 
-- [ ] Validate finite configuration, structures, energy, forces, and stress;
+- [x] Validate finite configuration, structures, energy, forces, and stress;
   distinguish unavailable stress from calculator failure; use strict JSON.
-- [ ] Reject explicitly unsupported CLI/example options; implement strict
+- [x] Reject explicitly unsupported CLI/example options; implement strict
   exits and expose unconverged counts.
-- [ ] Persist ordered per-item results and manifests atomically during execution;
+- [x] Persist ordered per-item results and manifests atomically during execution;
   retain completed work after interruptions, teardown, and persistence errors.
-- [ ] Make mocked GPU tests hermetic; cover adapter boundaries; extend opt-in
+- [x] Make mocked GPU tests hermetic; cover adapter boundaries; extend opt-in
   Polaris energy/optimization/batch checks and record their environment.
-- [ ] Run the complete CPU suite, lint/format checks, package build, example
-  help checks, and shell syntax checks; update the PR description.
+- [x] Run the complete CPU suite, lint/format checks, package build, example
+  help checks, and shell syntax checks.
 
 ## Persistence contract
 
@@ -55,8 +55,38 @@ must use a fresh batch directory; existing manifests are not overwritten.
 
 ## Verification and next session
 
-Implementation and verification are in progress. No live GPU/cluster execution
-is claimed. Final results and implementation revision will be recorded here.
+Implementation is complete at `28e764f` (four focused implementation commits;
+this handoff is a subsequent documentation-only change). PR #14's commit list
+is the source of truth for the final published branch head and GitHub checks.
+
+| Commit | Change |
+| --- | --- |
+| `4346208` | Scientific input/result validation and strict JSON |
+| `065d3cc` | Explicit option validation and strict CLI/example exits |
+| `c646505` | Incremental atomic persistence and Rootstock worker isolation |
+| `28e764f` | Adapter boundary tests, GPU recipe, CI checks, and documentation |
+
+Local verification on Python 3.12:
+
+- `PYTHONPATH=src pytest tests/ -q`: **259 passed, 1 skipped**.
+- Ruff lint and format checks pass for `src/`, MLIP tests, CLI tests,
+  `examples/mlip_gpu.py`, and `alcf/polaris/mlip/smoke.py`.
+- `python -m build --no-isolation --outdir /private/tmp/matkit-pr14-dist`:
+  source distribution and wheel built successfully.
+- Both GPU Python entry points pass `--help`; both Polaris shell scripts
+  pass `bash -n`; `git diff --check` passes.
+
+No real MACE model, Rootstock deployment, ALCHEMI GPU kernel, or cluster job was
+run during this implementation. Those capabilities remain experimental. The
+opt-in smoke runner records six cases, environment/commit information, logs,
+results, and convergence; it continues after individual case failures.
+
+Known limits: no automatic resume/retry, no parity/performance evidence, no
+common provenance migration, and no GCMC fixes in this PR. ALCHEMI native
+optimization step counts remain unknown (`n_steps=null`); per-item calculation
+times for native batches include shared chunk work and are not throughput
+measurements. Inputs/results remain accumulated in memory. Abrupt termination
+can leave a `running` manifest and a batch lock; use a fresh directory.
 
 After PR #14 is reviewed, begin roadmap milestone 1: cutoff propagation,
 RASPA2 success reporting, and explicit capability support status. Do not begin
