@@ -28,6 +28,10 @@ jobs:
         run: |
           ruff check tests/test_api*.py tests/test_foundations.py tests/test_operation_cli.py tests/test_mcp_api.py tests/test_packaged_resources.py tests/test_unified_smoke.py tests/fixtures/*.py examples/unified_smoke.py
           ruff format --check tests/test_api*.py tests/test_foundations.py tests/test_operation_cli.py tests/test_mcp_api.py tests/test_packaged_resources.py tests/test_unified_smoke.py tests/fixtures/*.py examples/unified_smoke.py
+      - name: Check calculation examples
+        run: |
+          ruff check tests/test_calculation_examples.py examples/zeopp.py examples/graspa.py examples/graspa_mixture_setup.py examples/mlip.py
+          ruff format --check tests/test_calculation_examples.py examples/zeopp.py examples/graspa.py examples/graspa_mixture_setup.py examples/mlip.py
 
   test:
     runs-on: ubuntu-latest
