@@ -20,6 +20,10 @@ jobs:
         run: ruff check src/
       - name: Check formatting
         run: ruff format --check src/
+      - name: Check MLIP tests and recipes
+        run: |
+          ruff check tests/test_mlip*.py tests/test_cli.py examples/mlip_gpu.py alcf/polaris/mlip/smoke.py
+          ruff format --check tests/test_mlip*.py tests/test_cli.py examples/mlip_gpu.py alcf/polaris/mlip/smoke.py
 
   test:
     runs-on: ubuntu-latest

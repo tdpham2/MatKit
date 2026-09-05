@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- MLIP numerical validation, strict CLI outcomes, incremental atomic batch
+  persistence, and an explicit experimental GPU validation recipe
+- Separate PR hardening and future development handoff plans in `docs/plans`
 - Runtime-selectable, agent-free MLIP APIs and CLI commands for direct ASE
   MACE, Rootstock, and NVIDIA ALCHEMI MACE calculations
 - Ordered MLIP batch execution with per-item JSON results, calculator/model
