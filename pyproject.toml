@@ -13,9 +13,11 @@ dependencies = [
     "click>=8.0",
     "networkx>=2.6",
     "numpy>=1.22",
+    "pydantic>=2,<3",
 ]
 
 [project.optional-dependencies]
+mcp = ["mcp>=2,<3"]
 rdkit = ["rdkit"]
 mlip = ["mace-torch"]
 rootstock = ["rootstock>=1.6,<2"]
@@ -29,6 +31,7 @@ dev = ["pytest>=7.0", "ruff>=0.4"]
 
 [project.scripts]
 matkit = "matkit.cli:main"
+matkit-mcp = "matkit.mcp:main"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
@@ -58,3 +61,4 @@ include-package-data = true
 "matkit.pygraspa.files.template_mixture" = ["*"]
 "matkit.pygraspa.files.template_mixture_isotherm" = ["*"]
 "matkit.zeopp.files" = ["*"]
+"matkit" = ["**/files/**/*"]

@@ -3,6 +3,8 @@ import logging
 import click
 import json
 
+from matkit.operation_cli import register_commands
+
 
 @click.group()
 @click.option(
@@ -22,6 +24,9 @@ def main(verbose):
         level=level,
         format="%(name)s: %(message)s",
     )
+
+
+register_commands(main)
 
 
 # ==========================================

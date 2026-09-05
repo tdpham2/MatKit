@@ -178,10 +178,25 @@ def _success_result(
     converged: bool,
     n_steps: int | None,
     calculation_time: float,
+    requested_properties: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     _validate_atoms(atoms)
-    energy = _finite_array("energy", energy, ()).item()
-    forces = _finite_array("forces", forces, (len(atoms), 3))
+    required = (
+        requested_properties
+        if requested_properties is not None
+        else ["potential_energy", "forces"]
+    )
+    for name, value in (
+        ("potential_energy", energy),
+        ("forces", forces),
+        ("stress", stress),
+    ):
+        if name in required and value is None:
+            raise ValueError(f"Requested property {name} is unavailable")
+    if energy is not None:
+        energy = _finite_array("energy", energy, ()).item()
+    if forces is not None:
+        forces = _finite_array("forces", forces, (len(atoms), 3))
     if stress is not None:
         stress = _finite_array("stress", stress, (3, 3))
     return {
@@ -191,7 +206,7 @@ def _success_result(
         "input_structure_file": input_file,
         "backend_info": backend.to_dict(),
         "calculation_input": calculation.to_dict(),
-        "energy": float(energy),
+        "energy": None if energy is None else float(energy),
         "energy_unit": "eV",
         "forces": None if forces is None else forces.tolist(),
         "force_unit": "eV/angstrom",
@@ -237,6 +252,7 @@ def _run_ase_item(
     calculator,
     backend: ASEMACEConfig | RootstockConfig,
     calculation: MLIPCalculationConfig,
+    requested_properties: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     atoms.calc = calculator
     # Rootstock's synchronous worker owns the GPU and its dependencies.
@@ -252,9 +268,18 @@ def _run_ase_item(
         )
         n_steps = optimizer.nsteps
 
-    energy = atoms.get_potential_energy()
-    forces = atoms.get_forces()
-    stress = _optional_stress(atoms)
+    properties = (
+        requested_properties
+        if requested_properties is not None
+        else ["potential_energy", "forces", "stress"]
+    )
+    energy = (
+        atoms.get_potential_energy()
+        if "potential_energy" in properties
+        else None
+    )
+    forces = atoms.get_forces() if "forces" in properties else None
+    stress = _optional_stress(atoms) if "stress" in properties else None
     if isinstance(backend, ASEMACEConfig):
         _synchronize_device(backend.device)
     elapsed = time.perf_counter() - started
@@ -269,6 +294,7 @@ def _run_ase_item(
         converged,
         n_steps,
         elapsed,
+        requested_properties=requested_properties,
     )
 
 

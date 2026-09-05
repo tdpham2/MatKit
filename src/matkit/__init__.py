@@ -3,6 +3,7 @@
 __version__ = "0.1.0"
 
 _SUBMODULES = {
+    "api",
     "graspa",
     "graspa_sycl",
     "raspa2",

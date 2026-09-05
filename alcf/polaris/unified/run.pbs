@@ -1,0 +1,16 @@
+#!/bin/bash
+#PBS -N matkit-unified
+#PBS -l select=1:system=polaris
+#PBS -l place=scatter
+#PBS -l walltime=01:00:00
+#PBS -q debug
+
+# Supply your account with qsub -A ACCOUNT and export the three variables below.
+# This script executes an already prepared bundle inside the allocated node.
+set -euo pipefail
+: "${MATKIT_PYTHON:?Set an absolute MatKit environment Python path}"
+: "${MATKIT_BUNDLE:?Set the absolute prepared-bundle path}"
+: "${MATKIT_EXECUTION_PROFILE:?Set the absolute execution-profile JSON path}"
+cd "${PBS_O_WORKDIR:?}"
+exec "$MATKIT_PYTHON" -m matkit.cli execute "$MATKIT_BUNDLE" \
+    --execution "$MATKIT_EXECUTION_PROFILE"

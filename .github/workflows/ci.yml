@@ -24,6 +24,10 @@ jobs:
         run: |
           ruff check tests/test_mlip*.py tests/test_cli.py examples/mlip_gpu.py alcf/polaris/mlip/smoke.py
           ruff format --check tests/test_mlip*.py tests/test_cli.py examples/mlip_gpu.py alcf/polaris/mlip/smoke.py
+      - name: Check unified API tests and recipes
+        run: |
+          ruff check tests/test_api*.py tests/test_foundations.py tests/test_operation_cli.py tests/test_mcp_api.py tests/test_packaged_resources.py tests/test_unified_smoke.py tests/fixtures/fake_engine.py examples/unified_smoke.py
+          ruff format --check tests/test_api*.py tests/test_foundations.py tests/test_operation_cli.py tests/test_mcp_api.py tests/test_packaged_resources.py tests/test_unified_smoke.py tests/fixtures/fake_engine.py examples/unified_smoke.py
 
   test:
     runs-on: ubuntu-latest
@@ -36,9 +40,30 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: |
+          pip install build pytest
+          python -m build --wheel
+          pip install dist/*.whl
       - name: Run tests
-        run: pytest tests/ -v
+        env:
+          MATKIT_WHEEL_TEST: "1"
+        run: |
+          mkdir -p "$RUNNER_TEMP/matkit-wheel-tests"
+          cp -R tests examples alcf "$RUNNER_TEMP/matkit-wheel-tests/"
+          cd "$RUNNER_TEMP/matkit-wheel-tests"
+          pytest tests/ -v
+
+  mcp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install optional MCP environment
+        run: pip install ".[dev,mcp]"
+      - name: Test local stdio and worker cancellation
+        run: pytest tests/test_mcp_api.py -v
 
   build:
     runs-on: ubuntu-latest
