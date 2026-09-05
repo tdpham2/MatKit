@@ -1012,6 +1012,379 @@ def mlip_cli():
     pass
 
 
+def _mlip_options(function):
+    """Add runtime-neutral MLIP options to a Click command."""
+    decorators = [
+        click.option(
+            "--backend",
+            required=True,
+            type=click.Choice(["ase-mace", "rootstock", "nvalchemi-mace"]),
+            help="MLIP execution backend.",
+        ),
+        click.option(
+            "--checkpoint",
+            required=True,
+            help="Model alias, canonical Rootstock ID, or checkpoint path.",
+        ),
+        click.option(
+            "--device", default=None, help="Device such as cpu or cuda."
+        ),
+        click.option(
+            "--dtype",
+            default=None,
+            type=click.Choice(["float32", "float64"]),
+            help="Floating-point precision.",
+        ),
+        click.option(
+            "--driver",
+            default="energy",
+            show_default=True,
+            type=click.Choice(["energy", "opt"]),
+        ),
+        click.option(
+            "--optimizer",
+            default="fire",
+            show_default=True,
+            type=click.Choice(["bfgs", "lbfgs", "gpmin", "fire", "mdmin"]),
+        ),
+        click.option("--fmax", default=0.01, show_default=True, type=float),
+        click.option("--steps", default=1000, show_default=True, type=int),
+        click.option(
+            "--calculator-type",
+            default="mace_mp",
+            show_default=True,
+            type=click.Choice(["mace_mp", "mace_off", "mace_anicc"]),
+            help="Direct ASE MACE calculator factory.",
+        ),
+        click.option(
+            "--dispersion/--no-dispersion",
+            default=False,
+            help="Enable MACE-MP D3 dispersion.",
+        ),
+        click.option("--cluster", default=None, help="Rootstock cluster ID."),
+        click.option(
+            "--root",
+            "root_path",
+            default=None,
+            type=click.Path(),
+            help="Custom Rootstock installation root.",
+        ),
+        click.option(
+            "--cache-root",
+            default=None,
+            type=click.Path(),
+            help="Custom Rootstock cache root.",
+        ),
+        click.option(
+            "--setup-kwarg",
+            multiple=True,
+            metavar="KEY=JSON",
+            help="Rootstock setup keyword; repeat as needed.",
+        ),
+        click.option(
+            "--timeout",
+            default=600.0,
+            show_default=True,
+            type=float,
+            help="Rootstock worker startup timeout.",
+        ),
+        click.option(
+            "--weights",
+            default=None,
+            type=click.Path(),
+            help="Rootstock custom checkpoint weights.",
+        ),
+        click.option(
+            "--dt",
+            default=0.1,
+            show_default=True,
+            type=float,
+            help="ALCHEMI FIRE timestep.",
+        ),
+        click.option(
+            "--compile-model",
+            is_flag=True,
+            help="Compile the ALCHEMI MACE model.",
+        ),
+        click.option(
+            "--enable-cueq",
+            is_flag=True,
+            help="Enable cuEquivariance in ALCHEMI MACE.",
+        ),
+    ]
+    for decorator in reversed(decorators):
+        function = decorator(function)
+    return function
+
+
+def _parse_setup_kwargs(values):
+    parsed = {}
+    for value in values:
+        if "=" not in value:
+            raise click.BadParameter(
+                "must use KEY=JSON syntax", param_hint="--setup-kwarg"
+            )
+        key, raw = value.split("=", 1)
+        if not key:
+            raise click.BadParameter(
+                "key must not be empty", param_hint="--setup-kwarg"
+            )
+        try:
+            parsed[key] = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed[key] = raw
+    return parsed
+
+
+def _build_mlip_configs(options):
+    from matkit.mlip import (
+        ASEMACEConfig,
+        MLIPCalculationConfig,
+        NVAlchemiMACEConfig,
+        RootstockConfig,
+    )
+    from matkit.mlip.config import _validate_explicit_options
+
+    ctx = click.get_current_context()
+    provided = {
+        name
+        for name in ctx.params
+        if ctx.get_parameter_source(name)
+        not in (
+            None,
+            click.core.ParameterSource.DEFAULT,
+        )
+    }
+    _validate_explicit_options(
+        options["backend"],
+        options["driver"],
+        options["calculator_type"],
+        provided,
+    )
+
+    backend_name = options["backend"]
+    checkpoint = options["checkpoint"]
+    device = options["device"]
+    dtype = options["dtype"]
+    if backend_name == "ase-mace":
+        backend = ASEMACEConfig(
+            checkpoint=checkpoint,
+            device=device or "cpu",
+            dtype=dtype or "float64",
+            calculator_type=options["calculator_type"],
+            dispersion=options["dispersion"],
+        )
+    elif backend_name == "rootstock":
+        backend = RootstockConfig(
+            checkpoint=checkpoint,
+            cluster=options["cluster"],
+            root=options["root_path"],
+            cache_root=options["cache_root"],
+            setup_kwargs=_parse_setup_kwargs(options["setup_kwarg"]),
+            timeout=options["timeout"],
+            weights=options["weights"],
+            device=device or "cpu",
+        )
+    else:
+        backend = NVAlchemiMACEConfig(
+            checkpoint=checkpoint,
+            device=device or "cuda",
+            dtype=dtype or "float32",
+            dt=options["dt"],
+            compile_model=options["compile_model"],
+            enable_cueq=options["enable_cueq"],
+        )
+    calculation = MLIPCalculationConfig(
+        driver=options["driver"],
+        optimizer=options["optimizer"],
+        fmax=options["fmax"],
+        steps=options["steps"],
+    )
+    if (
+        backend_name == "nvalchemi-mace"
+        and calculation.driver == "opt"
+        and calculation.optimizer != "fire"
+    ):
+        raise ValueError("NVIDIA ALCHEMI supports only the FIRE optimizer")
+    return backend, calculation
+
+
+def _mlip_configs_or_usage_error(options):
+    try:
+        return _build_mlip_configs(options)
+    except ValueError as exc:
+        raise click.BadParameter(str(exc)) from exc
+
+
+@mlip_cli.command("run")
+@click.option(
+    "--input",
+    "input_file",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Input structure readable by ASE.",
+)
+@click.option(
+    "--output",
+    default="output.json",
+    show_default=True,
+    type=click.Path(dir_okay=False),
+    help="JSON result file.",
+)
+@_mlip_options
+def mlip_run_cmd(input_file, output, **options):
+    """Run one MLIP energy calculation or fixed-cell optimization."""
+    from matkit.mlip import run_mlip
+
+    backend, calculation = _mlip_configs_or_usage_error(options)
+    try:
+        result = run_mlip(
+            input_file,
+            backend,
+            calculation=calculation,
+            output_file=output,
+        )
+    except Exception as exc:
+        click.echo(
+            json.dumps({"status": "failure", "error": str(exc)}, indent=2)
+        )
+        raise click.ClickException(str(exc)) from exc
+    unconverged = (
+        result["success"]
+        and calculation.driver == "opt"
+        and not result["converged"]
+    )
+    click.echo(
+        json.dumps(
+            {
+                "status": (
+                    "failure"
+                    if not result["success"]
+                    else "unconverged"
+                    if unconverged
+                    else "success"
+                ),
+                "energy": result["energy"],
+                "unit": result["energy_unit"],
+                "converged": result["converged"],
+                "output_results_file": str(output),
+                "error": result.get("error", ""),
+            },
+            indent=2,
+        )
+    )
+    if not result["success"]:
+        raise click.ClickException(result["error"])
+    if unconverged:
+        raise click.ClickException(
+            "Optimization did not converge; results retained."
+        )
+
+
+@mlip_cli.command("run-batch")
+@click.option(
+    "--input",
+    "input_files",
+    multiple=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Input structure; repeat for an ordered list.",
+)
+@click.option(
+    "--input-dir",
+    default=None,
+    type=click.Path(exists=True, file_okay=False),
+    help="Directory containing input structures.",
+)
+@click.option(
+    "--pattern",
+    default="*.cif",
+    show_default=True,
+    help="Glob used with --input-dir.",
+)
+@click.option(
+    "--outdir",
+    default="mlip_results",
+    show_default=True,
+    type=click.Path(file_okay=False),
+)
+@click.option(
+    "--batch-size", default=16, show_default=True, type=click.IntRange(min=1)
+)
+@click.option("--max-atoms", default=None, type=click.IntRange(min=1))
+@_mlip_options
+def mlip_run_batch_cmd(
+    input_files,
+    input_dir,
+    pattern,
+    outdir,
+    batch_size,
+    max_atoms,
+    **options,
+):
+    """Run an ordered MLIP batch and write a JSON manifest."""
+    from pathlib import Path
+
+    from matkit.mlip import run_mlip_batch
+
+    if bool(input_files) == bool(input_dir):
+        raise click.UsageError("Specify exactly one of --input or --input-dir.")
+    if input_dir:
+        files = [
+            str(path)
+            for path in sorted(Path(input_dir).glob(pattern))
+            if path.is_file()
+        ]
+        if not files:
+            raise click.UsageError(
+                f"No files matching {pattern!r} in {input_dir}."
+            )
+    else:
+        files = list(input_files)
+
+    backend, calculation = _mlip_configs_or_usage_error(options)
+    try:
+        summary = run_mlip_batch(
+            files,
+            backend,
+            calculation=calculation,
+            output_dir=outdir,
+            batch_size=batch_size,
+            max_atoms=max_atoms,
+        )
+    except Exception as exc:
+        click.echo(
+            json.dumps({"status": "failure", "error": str(exc)}, indent=2)
+        )
+        raise click.ClickException(str(exc)) from exc
+    unconverged = (
+        sum(
+            result["success"] and not result["converged"]
+            for result in summary["results"]
+        )
+        if calculation.driver == "opt"
+        else 0
+    )
+    click.echo(
+        json.dumps(
+            {
+                "status": summary["status"],
+                "manifest_file": summary["manifest_file"],
+                "total": summary["total"],
+                "succeeded": summary["succeeded"],
+                "failed": summary["failed"],
+                "unconverged": unconverged,
+            },
+            indent=2,
+        )
+    )
+    if summary["failed"] or unconverged:
+        raise click.ClickException(
+            f"MLIP batch: {summary['failed']} failed, "
+            f"{unconverged} unconverged; "
+            "available results retained."
+        )
+
+
 @mlip_cli.command("mace-opt")
 @click.option(
     "--fname",

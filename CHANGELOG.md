@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- MLIP numerical validation, strict CLI outcomes, incremental atomic batch
+  persistence, and an explicit experimental GPU validation recipe
+- Separate PR hardening and future development handoff plans in `docs/plans`
+- Runtime-selectable, agent-free MLIP APIs and CLI commands for direct ASE
+  MACE, Rootstock, and NVIDIA ALCHEMI MACE calculations
+- Ordered MLIP batch execution with per-item JSON results, calculator/model
+  reuse, partial-failure handling, and a persistent batch manifest
+- Polaris installation and live smoke-test recipes for the three MLIP paths
 - Zeo++ module (`matkit.zeopp`) for pore geometry analysis: pore diameters (Di/Df/Dif), accessible surface area, accessible volume, pore size distribution, and channel identification
 - CLI `matkit zeopp run` and `matkit zeopp analyze` subcommands with support for high accuracy mode (`-ha`), custom radii files (`-r UFF.rad`), and configurable probe parameters
 - CLI interface (`matkit` command) with subcommands for graspa, graspa_sycl, raspa2, and tobacco

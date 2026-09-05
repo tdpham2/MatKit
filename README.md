@@ -9,7 +9,7 @@
 - **RASPA2** -- Classical GCMC simulations
 - **RASPA3** -- Force field format conversion from RASPA2
 - **Zeo++** -- Pore geometry analysis (pore diameters, surface area, volume, channels)
-- **MACE-MP** -- ML interatomic potential geometry/cell optimization
+- **MLIPs** -- experimental direct MACE, Rootstock, and NVIDIA ALCHEMI adapters
 - **ORCA** -- Quantum chemistry (planned)
 
 ## Features
@@ -44,6 +44,12 @@ pip install -e ".[rdkit]"
 # For ML interatomic potentials (MACE)
 pip install -e ".[mlip]"
 
+# Lightweight access to cluster-managed Rootstock models
+pip install -e ".[rootstock]"
+
+# NVIDIA ALCHEMI MACE support (install a matching CUDA extra too)
+pip install -e ".[nvalchemi_mace]"
+
 # All optional dependencies
 pip install -e ".[all]"
 
@@ -75,7 +81,87 @@ matkit zeopp run --cif structure.cif --analysis res --analysis sa --radii UFF.ra
 
 # Parse existing Zeo++ output files
 matkit zeopp analyze --path output_dir/
+
+# Run MACE directly through ASE
+matkit mlip run --input structure.cif --backend ase-mace \
+  --checkpoint medium --device cuda --dtype float32
+
+# Run a Rootstock checkpoint already deployed on Polaris
+matkit mlip run --input structure.cif --backend rootstock \
+  --checkpoint mace-mp-0-medium --cluster polaris --device cuda
+
+# Run a native NVIDIA ALCHEMI batch
+matkit mlip run-batch --input-dir cifs --backend nvalchemi-mace \
+  --checkpoint medium --device cuda --batch-size 16
 ```
+
+### GPU examples
+
+[`examples/mlip_gpu.py`](examples/mlip_gpu.py) runs one backend per Python
+process so GPU runtime state is isolated. It accepts one or more ASE-readable
+structure files and writes a manifest plus one JSON result per input.
+
+```bash
+# Direct MACE calculator through ASE
+python examples/mlip_gpu.py --backend ase-mace structure.cif
+
+# Rootstock-managed MACE checkpoint on Polaris
+python examples/mlip_gpu.py --backend rootstock \
+  --cluster polaris --checkpoint mace-mp-0-medium structure.cif
+
+# NVIDIA ALCHEMI MACE with native GPU batching
+python examples/mlip_gpu.py --backend nvalchemi-mace \
+  --checkpoint medium --batch-size 16 structures/*.cif
+```
+
+All three commands force `device="cuda"` and use `float32` where the backend
+exposes a dtype. Pass `--driver opt` for a fixed-cell geometry optimization.
+
+The new MLIP adapters remain **experimental** until a real execution is
+recorded for the backend, capability, and environment. CPU tests exercise
+validation and adapter contracts; they do not establish GPU compatibility or
+scientific accuracy. See the [Polaris smoke recipe](alcf/polaris/mlip/README.md)
+for opt-in energy, optimization, and native batch checks.
+
+### MLIP outcomes and batch files
+
+`success` means a calculation produced valid numerical results. Optimization
+convergence is reported separately as `converged`; usable unconverged results
+are retained. The CLI and GPU example exit **1** if any item fails or any
+requested optimization remains unconverged, **2** for invalid arguments, and
+**0** only when the requested calculations succeed. JSON summaries go to stdout;
+MatKit's failure diagnostics go to stderr. Optional engines may also emit logs.
+
+Batch result files and `batch_manifest.json` are replaced atomically as each
+item completes (after each native ALCHEMI chunk). The manifest starts `running`
+with pending items, then finishes `completed`, `partial`, or `failure`. It
+includes `pending`, `unconverged`, per-item `converged`, and a run-level `error`.
+An execution-complete batch can still contain unconverged optimizations.
+Catchable orchestration failures record `interrupted`; abrupt termination can
+leave `running`. Previously committed result files remain available. An
+unrecoverable filesystem failure may also prevent the last manifest update.
+
+Use a **fresh output directory for every batch**. Existing manifests or active
+batch locks are refused; automatic resume and retries are deferred. The GPU
+example accepts `--output-dir` and the CLI accepts `--outdir` for reruns.
+
+Explicit options that do not apply to the selected backend/driver are errors:
+
+- `--optimizer`, `--fmax`, and `--steps` require `--driver opt`.
+- `--dt`, `--compile-model`, `--enable-cueq`, `--batch-size`, and `--max-atoms`
+  belong to ALCHEMI; `--dt` also requires optimization. `max_atoms` limits chunk
+  grouping; a single larger structure is still processed alone.
+- Rootstock precision uses a model-supported `--setup-kwarg`, not `--dtype`.
+  Rootstock workers own their GPU environment; the caller does not need CUDA.
+- The `mace_anicc` factory controls precision and rejects an explicit CLI dtype.
+  The configuration records requested settings; comprehensive resolved model
+  provenance is future work.
+
+MLIP optional packages may require a newer Python than MatKit's core. ALCHEMI
+0.2 requires Python 3.11–3.13 and a matching CUDA stack; the Polaris recipe uses
+Python 3.12/CUDA 12. Its MACE extra pins 0.3.15, which conflicts with ChemGraph's
+currently required MACE >=0.3.16. Use a MatKit-specific environment rather than
+combining these stacks. The `all` extra does not include Rootstock or ALCHEMI.
 
 ## Python API
 
@@ -111,7 +197,33 @@ print(result["results"]["sa"])    # {'ASA': 4004.7, 'ASA_m2_g': 3918.3, ...}
 
 # Parse existing Zeo++ output files
 result = get_output_data("output_dir/")
+
+# Agent-free, runtime-selectable MLIP execution
+from matkit.mlip import (
+    ASEMACEConfig,
+    MLIPCalculationConfig,
+    run_mlip,
+)
+
+result = run_mlip(
+    "structure.cif",
+    ASEMACEConfig(
+        checkpoint="medium",
+        device="cuda",
+        dtype="float32",
+    ),
+    MLIPCalculationConfig(driver="energy"),
+    output_file="mace_result.json",
+)
 ```
+
+## Development roadmap
+
+The [PR #14 handoff](docs/plans/pr14-hardening.md) records immediate MLIP fixes
+and validation. The separate [MatKit roadmap](docs/plans/matkit-roadmap.md)
+starts with GCMC correctness and capability status, followed by common result
+contracts, reproducibility/benchmarks, a porous-material workflow, ChemGraph
+integration, and tested skills.
 
 ## License
 

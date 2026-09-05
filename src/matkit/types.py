@@ -73,3 +73,49 @@ class UMABatchResult(TypedDict):
     final_energy: Optional[float]
     n_steps: Optional[int]
     error_message: Optional[str]
+
+
+class _MLIPArtifacts(TypedDict, total=False):
+    output_results_file: str
+
+
+class MLIPResult(_MLIPArtifacts):
+    """Runtime-neutral result from ``matkit.mlip.run_mlip``."""
+
+    schema_version: int
+    success: bool
+    error: str
+    input_structure_file: str
+    backend_info: dict
+    calculation_input: dict
+    energy: Optional[float]
+    energy_unit: str
+    forces: Optional[list[list[float]]]
+    force_unit: str
+    stress: Optional[list[list[float]]]
+    stress_unit: str
+    converged: bool
+    n_steps: Optional[int]
+    final_structure: Optional[dict]
+    calculation_time_s: float
+    setup_time_s: float
+
+
+class MLIPBatchSummary(TypedDict):
+    """Persistent summary from ``matkit.mlip.run_mlip_batch``."""
+
+    schema_version: int
+    status: str
+    backend_info: dict
+    calculation_input: dict
+    setup_time_s: float
+    wall_time_s: float
+    total: int
+    succeeded: int
+    failed: int
+    pending: int
+    unconverged: int
+    error: str
+    items: list[dict]
+    manifest_file: str
+    results: list[MLIPResult]
