@@ -225,11 +225,21 @@ result = run_mlip(
 
 ## Development roadmap
 
-The [PR #14 handoff](docs/plans/pr14-hardening.md) records immediate MLIP fixes
-and validation. The separate [MatKit roadmap](docs/plans/matkit-roadmap.md)
-starts with GCMC correctness and capability status, followed by common result
-contracts, reproducibility/benchmarks, a porous-material workflow, ChemGraph
-integration, and tested skills.
+The [MatKit roadmap](docs/plans/matkit-roadmap.md) records the unified API
+baseline and the correctness follow-up for engine output, scientific acceptance,
+and isotherm units. Next come real-engine reference evidence, a validated charge
+handoff and scripted porous-material workflow, recovery and scaling, optional
+MOFforge integration, and ChemGraph evaluations.
+
+[MOFforge](https://github.com/tdpham2/mofforge) prepares and manipulates structures;
+MatKit owns scientific relaxation, charge prediction, pore calculations, and
+simulations; ChemGraph coordinates workflows across both toolkits. MOFforge
+integration remains optional and is a future milestone.
+
+Single-isotherm data may use bar or Pa; pressures are converted into the first
+recognized unit before sorting. Each curve must use one temperature and
+consistent uptake and heat-of-adsorption units. Duplicate physical pressure
+points are rejected; aggregate replicate measurements explicitly before plotting.
 
 ## License
 
