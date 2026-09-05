@@ -1,4 +1,5 @@
 import shutil
+import math
 from pathlib import Path
 
 from ase.io import read as ase_read
@@ -51,7 +52,7 @@ def setup_input_simulation(
         shutil.copy(cif, outdir)
 
         atoms = ase_read(cif)
-        uc_x, uc_y, uc_z = calculate_cell_size(atoms)
+        uc_x, uc_y, uc_z = calculate_cell_size(atoms, cutoff=cutoff)
 
         render_template(
             outdir / "simulation.input",
@@ -110,6 +111,22 @@ def get_output_data(
     uptake_mg_g = float(mg_g_line.split()[5])
     error_mg_g = float(mg_g_line.split()[7])
 
+    if (
+        not all(
+            math.isfinite(value)
+            for value in (
+                uptake_mol_kg,
+                error_mol_kg,
+                density_kg_m3,
+                uptake_mg_g,
+                error_mg_g,
+            )
+        )
+        or density_kg_m3 <= 0
+        or min(error_mol_kg, error_mg_g) < 0
+    ):
+        raise ValueError("Invalid numerical adsorption results")
+
     if unit == "mol/kg":
         result["uptake"] = uptake_mol_kg
         result["error"] = error_mol_kg
@@ -137,4 +154,5 @@ def get_output_data(
 
         duration_seconds = int((end_time - start_time).total_seconds())
         result["calc_time_in_s"] = duration_seconds
+    result["success"] = True
     return result

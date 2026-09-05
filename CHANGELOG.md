@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Experimental unified scientific API, versioned requests/results, structure
+  lineage, relocatable run bundles, and supervised local execution
+- Shared operation CLI and optional bounded stdio MCP tools with artifact
+  retrieval, plus installed-wheel and deterministic transport tests
+- Single-component gRASPA CUDA prepare/run/analyze path, capability inventory,
+  and opt-in execution evidence recorder
 - MLIP numerical validation, strict CLI outcomes, incremental atomic batch
   persistence, and an explicit experimental GPU validation recipe
 - Separate PR hardening and future development handoff plans in `docs/plans`
@@ -28,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `conftest.py` for pytest configuration
 
 ### Fixed
+- Custom cutoff propagation through GCMC unit-cell replication and cached
+  batch setup, and successful RASPA2 parsing incorrectly reporting failure
 - **MACE optimizer bug**: `geo_opt_cell_opt` mode called `dyn1.run()` instead of `dyn.run()` for cell optimization step, meaning the cell was never actually optimized
 - **Missing f-string**: `raspa2.py` error message `"Unit {unit} is not supported"` was missing `f` prefix
 - **Unreachable code**: Removed dead `return result` after `raise ValueError` in `graspa.py` and `graspa_sycl.py`

@@ -1,5 +1,7 @@
 import numpy as np
 import ase
+import math
+from numbers import Real
 
 
 def calculate_cell_size(atoms: ase.Atoms, cutoff: float = 12.8) -> list[int]:
@@ -12,7 +14,19 @@ def calculate_cell_size(atoms: ase.Atoms, cutoff: float = 12.8) -> list[int]:
     Returns:
         list[int, int, int]: Unit cell in x, y and z
     """
+    if (
+        isinstance(cutoff, bool)
+        or not isinstance(cutoff, Real)
+        or not math.isfinite(cutoff)
+        or cutoff <= 0
+    ):
+        raise ValueError("cutoff must be positive and finite")
     unit_cell = atoms.cell[:]
+    if (
+        not np.isfinite(unit_cell).all()
+        or np.linalg.matrix_rank(unit_cell) != 3
+    ):
+        raise ValueError("Cell replication requires three independent vectors")
     # Unit cell vectors
     a = unit_cell[0]
     b = unit_cell[1]

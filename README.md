@@ -165,6 +165,12 @@ combining these stacks. The `all` extra does not include Rootstock or ALCHEMI.
 
 ## Python API
 
+The experimental [unified operation API](docs/unified-api.md) provides shared
+Python/CLI requests, relocatable calculation bundles, and optional MCP tools.
+It covers MLIP evaluation/relaxation, Zeo++ analysis, and single-component
+gRASPA CUDA execution. See the [capability inventory](docs/capabilities.md)
+for implementation status, environment requirements, and validation limits.
+
 ```python
 from matkit.graspa import setup_simulation, get_output_data
 from matkit.utils import calculate_cell_size, remove_solvent, sample_cifs

@@ -210,7 +210,7 @@ def setup_simulation(
         uc_x, uc_y, uc_z = cell_size
     else:
         atoms = ase_read(cifpath)
-        uc_x, uc_y, uc_z = calculate_cell_size(atoms)
+        uc_x, uc_y, uc_z = calculate_cell_size(atoms, cutoff=cutoff)
 
     input_path = outdir / "simulation.input"
     render_template(
@@ -252,7 +252,7 @@ def _setup_single_cif(
     directory for each (temperature, pressure) combination.
     """
     atoms = ase_read(cif)
-    cell_size = calculate_cell_size(atoms)
+    cell_size = calculate_cell_size(atoms, cutoff=cutoff)
     safe_stem = sanitize_cif_stem(cif.stem)
 
     entries = []

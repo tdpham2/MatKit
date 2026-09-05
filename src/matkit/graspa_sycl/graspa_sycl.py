@@ -47,7 +47,7 @@ def setup_simulation(
     shutil.copy(cifpath, outdir / f"{safe_stem}.cif")
 
     atoms = ase_read(cif)
-    uc_x, uc_y, uc_z = calculate_cell_size(atoms)
+    uc_x, uc_y, uc_z = calculate_cell_size(atoms, cutoff=cutoff)
 
     render_template(
         outdir / "simulation.input",
