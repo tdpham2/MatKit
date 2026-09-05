@@ -95,6 +95,14 @@ matkit mlip run-batch --input-dir cifs --backend nvalchemi-mace \
   --checkpoint medium --device cuda --batch-size 16
 ```
 
+### Calculation examples
+
+The [calculation examples guide](examples/README.md) covers Zeo++ pore analysis
+and screening, pure-component gRASPA execution and pressure sweeps, mixture
+preparation, and MLIP evaluation/relaxation/batches across all three current
+backends. It includes runnable Python programs, equivalent CLI specifications,
+and result inspection using public MatKit interfaces.
+
 ### GPU examples
 
 [`examples/mlip_gpu.py`](examples/mlip_gpu.py) runs one backend per Python
