@@ -202,6 +202,12 @@ An unconverged relaxation can have valid numerical results and `state=completed`
 while `accepted` is false. Unknown sampling quality does not become a claim of
 equilibrium. Failure information is separate from adsorption uncertainty.
 
+Completed evaluation records must contain every requested property, including
+when read back from JSON. Relaxation acceptance requires both convergence and
+an explicit, required, passed `force_convergence` check. Missing checks leave
+otherwise valid numerical records unaccepted; contradictory convergence claims
+and forces exceeding the requested threshold are rejected during validation.
+
 Energy uses `potential_energy` in eV with a model-specific reference; forces
 use eV/angstrom; stress uses the ASE Cartesian convention in eV/angstrom³.
 The shared interface does not make energies from different methods comparable.
@@ -237,6 +243,12 @@ prevent recovery of a valid committed result. A hard process kill
 can leave a running record or stale lock; automatic resume and restart are not
 implemented. Copy a completed result for inspection, and prepare a fresh bundle
 for another execution. Engine-specific restart requires additional future work.
+
+Supervised Python/CLI and MCP execution record timeouts, cancellation, teardown
+failures, and unexpected exit codes even after a numerical result was committed.
+In that case `result.json` retains the scientific outcome, while `run.json` and
+inspection report an orchestration interruption and `accepted=false`. Worker
+log inventories are refreshed without replacing the committed scientific state.
 
 ## MCP
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from typing import Annotated, Literal, Union
 
 from pydantic import (
@@ -357,10 +358,25 @@ class RunResult(Model):
                 or check.status in {"passed", "not_applicable"}
                 for check in self.checks
             )
+            and (
+                self.operation != "relax"
+                or (
+                    isinstance(self.payload, EvaluationPayload)
+                    and self.payload.converged is True
+                    and any(
+                        check.name == "force_convergence"
+                        and check.required
+                        and check.status == "passed"
+                        for check in self.checks
+                    )
+                )
+            )
         )
 
     @model_validator(mode="after")
     def consistent_outcome(self):
+        if len({check.name for check in self.checks}) != len(self.checks):
+            raise ValueError("Scientific check names must be unique")
         if self.state == "completed" and (
             self.payload is None
             or self.numerical_validity != "valid"
@@ -379,6 +395,39 @@ class RunResult(Model):
             )
             if self.payload.kind != kind:
                 raise ValueError("Payload kind does not match operation")
+        if self.state == "completed" and isinstance(
+            self.payload, EvaluationPayload
+        ):
+            request = parse_request(self.requested)
+            if request.operation != self.operation:
+                raise ValueError("Requested operation does not match result")
+            required = (
+                request.properties
+                if isinstance(request, EvaluateRequest)
+                else ["potential_energy", "forces"]
+            )
+            for name in required:
+                value = getattr(self.payload, name)
+                if value is None or (name == "forces" and not value):
+                    raise ValueError(f"Requested property {name} is missing")
+            if isinstance(request, RelaxRequest):
+                if self.payload.converged is None:
+                    raise ValueError("Relaxation must report convergence")
+                expected = "passed" if self.payload.converged else "failed"
+                for check in self.checks:
+                    if check.name == "force_convergence" and (
+                        not check.required or check.status != expected
+                    ):
+                        raise ValueError(
+                            "Contradictory force convergence check"
+                        )
+                max_force = max(
+                    math.hypot(*force) for force in self.payload.forces
+                )
+                if self.payload.converged and (
+                    max_force > request.fmax * (1 + 1e-6) + 1e-12
+                ):
+                    raise ValueError("Converged forces exceed requested fmax")
         return self
 
 

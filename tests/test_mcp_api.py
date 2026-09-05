@@ -163,3 +163,65 @@ def test_mcp_cancellation_preserves_interrupted_run(sample_cif, tmp_path):
                 pytest.fail("cancellation did not persist the interrupted run")
 
     asyncio.run(check())
+
+
+@pytest.mark.parametrize(
+    "behavior", ["hang", "bad_exit", "teardown_error", "cancel"]
+)
+def test_mcp_preserves_result_and_reports_post_commit_failure(
+    behavior, sample_cif, tmp_path, monkeypatch
+):
+    from matkit import mcp
+    from tests.test_api_worker_outcomes import assert_preserved, worker_command
+
+    monkeypatch.setattr(
+        mcp,
+        "_worker_command",
+        worker_command("hang" if behavior == "cancel" else behavior),
+    )
+    root = tmp_path / "runs"
+    server = create_server(
+        run_root=root,
+        input_roots=[Path(sample_cif).parent],
+        profiles={"default": profile()},
+        timeout_s=30 if behavior == "cancel" else 3,
+    )
+
+    async def check():
+        async with Client(server) as client:
+            task = asyncio.create_task(
+                client.call_tool(
+                    "matkit_pores",
+                    {"request": {"structure": {"path": sample_cif}}},
+                )
+            )
+            if behavior == "cancel":
+                for _ in range(200):
+                    if list(root.glob("*/worker.finished")):
+                        break
+                    await asyncio.sleep(0.025)
+                else:
+                    pytest.fail("worker did not commit its result")
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+                for _ in range(200):
+                    run_root = next(root.glob("*/worker.finished")).parent
+                    if (
+                        not (run_root / ".matkit.lock").exists()
+                        and inspect_run(run_root).state == "interrupted"
+                    ):
+                        break
+                    await asyncio.sleep(0.025)
+                else:
+                    pytest.fail("cancellation did not record interruption")
+            else:
+                response = await task
+                assert not response.is_error, response
+                data = response.structured_content
+                assert data["state"] == "interrupted"
+                assert not data["accepted"]
+            run_root = next(root.glob("*/worker.finished")).parent
+            assert_preserved(run_root)
+
+    asyncio.run(check())
