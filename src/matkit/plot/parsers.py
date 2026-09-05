@@ -14,6 +14,7 @@ Supports two formats produced by gRASPA / RASPA simulations:
 import json
 import math
 import re
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 # Regex patterns for key formats
@@ -72,7 +73,10 @@ def detect_format(data: dict) -> str:
 
 
 def parse_single_isotherm(data: dict) -> dict:
-    """Parse a single-component isotherm JSON dict.
+    """Parse one temperature, normalizing pressures to the first input unit.
+
+    Mixed temperatures, incompatible uptake/heat units, and duplicate physical
+    pressures are errors. Replicate aggregation requires an explicit workflow.
 
     Args:
         data: Dict with keys like ``"0.1bar_298K"`` mapping to
@@ -94,21 +98,49 @@ def parse_single_isotherm(data: dict) -> dict:
     """
     entries = []
     pressure_unit = None
+    pressures_seen = set()
 
     for key, values in data.items():
         m_bar = _PRESSURE_BAR_RE.match(key)
         m_pa = _PRESSURE_PA_RE.match(key)
 
         if m_bar:
-            pressure = float(m_bar.group("pressure"))
-            temperature = float(m_bar.group("temp"))
-            pressure_unit = pressure_unit or "bar"
+            match, source_unit = m_bar, "bar"
         elif m_pa:
-            pressure = float(m_pa.group("pressure"))
-            temperature = float(m_pa.group("temp"))
-            pressure_unit = pressure_unit or "Pa"
+            match, source_unit = m_pa, "Pa"
         else:
             continue  # skip unrecognised keys
+
+        pressure_unit = pressure_unit or source_unit
+        try:
+            pressure_pa = Decimal(match.group("pressure")) * (
+                100000 if source_unit == "bar" else 1
+            )
+            pressure = float(
+                pressure_pa / (100000 if pressure_unit == "bar" else 1)
+            )
+            temperature = float(match.group("temp"))
+        except (InvalidOperation, ValueError, OverflowError) as exc:
+            raise ValueError(
+                f"Invalid pressure/temperature key: {key}"
+            ) from exc
+        if (
+            not math.isfinite(pressure)
+            or not math.isfinite(temperature)
+            or pressure < 0
+            or temperature <= 0
+        ):
+            raise ValueError(f"Invalid pressure/temperature key: {key}")
+        if entries and temperature != entries[0]["temperature"]:
+            raise ValueError("One isotherm must not mix temperatures")
+        if entries and values.get("unit", "mol/kg") != entries[0]["unit"]:
+            raise ValueError("One isotherm must not mix uptake units")
+        if pressure_pa in pressures_seen:
+            raise ValueError(
+                f"Duplicate physical pressure at {key}; "
+                "aggregate replicates explicitly"
+            )
+        pressures_seen.add(pressure_pa)
 
         entries.append(
             {
@@ -124,6 +156,15 @@ def parse_single_isotherm(data: dict) -> dict:
         )
 
     entries.sort(key=lambda e: e["pressure"])
+    heat_units = {
+        entry["qst_unit"]
+        for entry in entries
+        if entry["qst_unit"] is not None
+        or math.isfinite(entry["qst"])
+        or math.isfinite(entry["qst_error"])
+    }
+    if len(heat_units) > 1:
+        raise ValueError("One isotherm must not mix heat-of-adsorption units")
 
     return {
         "format": "single",
@@ -135,7 +176,7 @@ def parse_single_isotherm(data: dict) -> dict:
         "temperature": entries[0]["temperature"] if entries else None,
         "qst": [e["qst"] for e in entries],
         "qst_errors": [e["qst_error"] for e in entries],
-        "qst_unit": (entries[0]["qst_unit"] if entries else None),
+        "qst_unit": next(iter(heat_units), None),
     }
 
 
