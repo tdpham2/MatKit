@@ -26,12 +26,11 @@ from matkit.api.bundles import (
     artifact,
     atomic_json,
     claim,
-    collect_artifacts,
-    commit_result,
     contained_path,
+    refresh_artifacts,
 )
 from matkit.api.models import Artifact, Failure, Model, ScientificCheck
-from matkit.api.runtime import _fail, _worker_command
+from matkit.api.runtime import _interrupt_run, _worker_command
 from matkit.api.structures import sha256
 from matkit.operation_cli import resolve_request_paths
 
@@ -126,16 +125,15 @@ async def _execute_bounded(root, execution):
                 with anyio.fail_after(execution.timeout_s):
                     code = await process.wait()
                 record = inspect_run(root)
-                if record.state in {"prepared", "running"}:
-                    _fail(
+                if record.state in {"prepared", "running"} or code != (
+                    0 if record.accepted else 1
+                ):
+                    _interrupt_run(
                         root,
-                        record,
                         RuntimeError(
                             f"Worker exited with code {code}; "
                             "see worker.stderr.log"
                         ),
-                        "worker",
-                        interrupted=True,
                     )
             except BaseException as exc:
                 with anyio.CancelScope(shield=True):
@@ -152,14 +150,7 @@ async def _execute_bounded(root, execution):
                             else:
                                 process.kill()
                             await process.wait()
-                    if not (root / "result.json").exists():
-                        _fail(
-                            root,
-                            inspect_run(root),
-                            exc,
-                            "worker",
-                            interrupted=True,
-                        )
+                    _interrupt_run(root, exc)
                 if not isinstance(exc, (TimeoutError, OSError)):
                     raise
             finally:
@@ -173,22 +164,10 @@ async def _execute_bounded(root, execution):
                         await process.aclose()
                         record = inspect_run(root)
                         if record.state not in {"prepared", "running"}:
-                            commit_result(
-                                root,
-                                record.model_copy(
-                                    update={
-                                        "artifacts": collect_artifacts(root)
-                                    }
-                                ),
-                            )
+                            refresh_artifacts(root, record)
         record = inspect_run(root)
         if record.state not in {"prepared", "running"}:
-            commit_result(
-                root,
-                record.model_copy(
-                    update={"artifacts": collect_artifacts(root)}
-                ),
-            )
+            refresh_artifacts(root, record)
     return _summary(root)
 
 

@@ -151,6 +151,28 @@ def commit_result(root: Path, result: RunResult) -> RunResult:
     return result
 
 
+def refresh_artifacts(root: Path, record: RunResult) -> RunResult:
+    """Update closed worker logs without replacing a committed outcome.
+
+    The manifest can report interruption after the scientific result was
+    committed. Keep those states distinct while refreshing both inventories.
+    """
+    artifacts = collect_artifacts(root)
+    record = RunResult.model_validate(
+        record.model_copy(update={"artifacts": artifacts}).model_dump()
+    )
+    result_path = root / "result.json"
+    if result_path.exists():
+        committed = RunResult.model_validate_json(result_path.read_text())
+        if committed.run_id != record.run_id:
+            raise ValueError("Committed result does not match run manifest")
+        atomic_json(
+            result_path, committed.model_copy(update={"artifacts": artifacts})
+        )
+    atomic_json(root / "run.json", record)
+    return record
+
+
 def environment_versions() -> dict:
     versions = {}
     for package in (

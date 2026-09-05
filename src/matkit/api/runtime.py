@@ -18,6 +18,7 @@ from .bundles import (
     environment_versions,
     inspect_run,
     prepare,
+    refresh_artifacts,
     staged_request,
     verify_inputs,
 )
@@ -174,6 +175,25 @@ def _worker_command(root, execution, batch):
     return command
 
 
+def _interrupt_run(root, exc):
+    """Record interruption without replacing committed science."""
+    record = inspect_run(root)
+    if not (root / "result.json").exists():
+        return _fail(root, record, exc, "worker", interrupted=True)
+    interrupted = record.model_copy(
+        update={
+            "state": "interrupted",
+            "failure": Failure(
+                code=type(exc).__name__,
+                stage="orchestration",
+                message=str(exc) or type(exc).__name__,
+            ),
+        }
+    )
+    atomic_json(root / "run.json", interrupted)
+    return interrupted
+
+
 def _supervise_claimed(root, execution, batch=False):
     atomic_json(
         root / "execution.json",
@@ -201,22 +221,16 @@ def _supervise_claimed(root, execution, batch=False):
             adapters.stop_process(process)
             if batch:
                 _interrupt_batch(root, exc)
-            elif not (root / "result.json").exists():
-                _fail(root, inspect_run(root), exc, "worker", interrupted=True)
+            else:
+                result = refresh_artifacts(root, _interrupt_run(root, exc))
             if isinstance(exc, subprocess.TimeoutExpired):
                 if batch:
                     return read_batch(root)
-                result = inspect_run(root)
-                return commit_result(
-                    root,
-                    result.model_copy(
-                        update={"artifacts": collect_artifacts(root)}
-                    ),
-                )
+                return result
             raise
     if batch:
         result = read_batch(root)
-        if result.state == "running":
+        if result.state == "running" or code != (0 if result.accepted else 1):
             _interrupt_batch(
                 root, RuntimeError(f"Worker exited with code {code}")
             )
@@ -233,13 +247,13 @@ def _supervise_claimed(root, execution, batch=False):
             interrupted=True,
         )
     if code != (0 if result.accepted else 1):
-        raise RuntimeError(
-            f"Worker exited with code {code}; "
-            f"committed results remain in {root}"
+        result = _interrupt_run(
+            root,
+            RuntimeError(
+                f"Worker exited with code {code}; see worker.stderr.log"
+            ),
         )
-    return commit_result(
-        root, result.model_copy(update={"artifacts": collect_artifacts(root)})
-    )
+    return refresh_artifacts(root, result)
 
 
 def execute(

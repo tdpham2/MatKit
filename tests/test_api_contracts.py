@@ -22,7 +22,7 @@ from matkit.api import (
     parse_request,
     prepare,
 )
-from matkit.api.models import REQUEST_ADAPTER
+from matkit.api.models import REQUEST_ADAPTER, EvaluationPayload
 from matkit.api.structures import final_structure, load_structure, to_atoms
 
 
@@ -148,3 +148,123 @@ def test_preparation_is_engine_independent(sample_cif, tmp_path):
     assert record.state == "prepared"
     assert any(a.path == "inputs/radii.rad" for a in record.artifacts)
     assert all(not Path(a.path).is_absolute() for a in record.artifacts)
+
+
+def _relaxation_record(converged, checks):
+    request = RelaxRequest(
+        structure=StructureRef(path="input.cif"),
+        method=MLIPMethod(checkpoint="fixture"),
+    )
+    return {
+        "run_id": "fixture",
+        "operation": "relax",
+        "state": "completed",
+        "numerical_validity": "valid",
+        "requested": request.model_dump(),
+        "payload": EvaluationPayload(
+            potential_energy=-1,
+            forces=[[0, 0, 0]],
+            converged=converged,
+        ).model_dump(),
+        "checks": checks,
+    }
+
+
+@pytest.mark.parametrize("converged", [True, False])
+def test_missing_convergence_check_never_accepts_imported_result(converged):
+    record = RunResult.model_validate_json(
+        json.dumps(_relaxation_record(converged, []))
+    )
+    assert record.numerical_validity == "valid"
+    assert not record.accepted
+
+
+@pytest.mark.parametrize(
+    "converged,status", [(False, "passed"), (True, "failed")]
+)
+def test_contradictory_imported_convergence_rejected(converged, status):
+    values = _relaxation_record(
+        converged,
+        [
+            {
+                "name": "force_convergence",
+                "required": True,
+                "status": status,
+            }
+        ],
+    )
+    with pytest.raises(ValueError, match="Contradictory"):
+        RunResult.model_validate_json(json.dumps(values))
+
+
+@pytest.mark.parametrize("converged", [True, False])
+def test_valid_convergence_round_trip(converged):
+    values = _relaxation_record(
+        converged,
+        [
+            {
+                "name": "force_convergence",
+                "required": True,
+                "status": "passed" if converged else "failed",
+            }
+        ],
+    )
+    result = RunResult.model_validate_json(json.dumps(values))
+    assert result.accepted is converged
+    assert RunResult.model_validate_json(result.model_dump_json()) == result
+
+
+def test_converged_result_requires_forces_below_requested_threshold():
+    values = _relaxation_record(
+        True,
+        [
+            {
+                "name": "force_convergence",
+                "required": True,
+                "status": "passed",
+            }
+        ],
+    )
+    values["payload"]["forces"] = [[1, 0, 0]]
+    with pytest.raises(ValueError, match="exceed requested fmax"):
+        RunResult.model_validate_json(json.dumps(values))
+
+
+@pytest.mark.parametrize(
+    "properties",
+    [
+        ["potential_energy"],
+        ["forces"],
+        ["stress"],
+        ["potential_energy", "forces", "stress"],
+    ],
+)
+def test_completed_evaluation_requires_requested_properties(properties):
+    request = EvaluateRequest(
+        structure=StructureRef(path="input.cif"),
+        method=MLIPMethod(checkpoint="fixture"),
+        properties=properties,
+    )
+    values = {
+        "run_id": "fixture",
+        "operation": "evaluate",
+        "state": "completed",
+        "numerical_validity": "valid",
+        "requested": request.model_dump(),
+        "payload": {
+            "kind": "evaluation",
+            "potential_energy": -1,
+            "forces": [[0, 0, 0]],
+            "stress": [[0, 0, 0]] * 3,
+        },
+    }
+    result = RunResult.model_validate_json(json.dumps(values))
+    assert result.accepted
+    for property_name in properties:
+        incomplete = json.loads(json.dumps(values))
+        incomplete["payload"][property_name] = None
+        with pytest.raises(ValueError, match=f"property {property_name}"):
+            RunResult.model_validate_json(json.dumps(incomplete))
+    for property_name in set(values["payload"]) - set(properties) - {"kind"}:
+        values["payload"][property_name] = None
+    assert RunResult.model_validate_json(json.dumps(values)).accepted
