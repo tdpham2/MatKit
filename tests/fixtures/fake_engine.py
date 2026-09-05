@@ -17,7 +17,8 @@ if mode == "zeopp":
         if f"-{analysis}" in sys.argv and not (
             "--partial" in sys.argv and analysis == "sa"
         ):
-            Path(f"structure.{analysis}").write_bytes(
+            suffix = "psd_histo" if analysis == "psd" else analysis
+            Path(f"structure.{suffix}").write_bytes(
                 (fixtures / f"test_structure.{analysis}").read_bytes()
             )
 elif mode == "graspa":

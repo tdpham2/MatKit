@@ -19,6 +19,13 @@ from matkit.zeopp.zeopp import (
 )
 
 
+def _successful_res(cmd, **kwargs):
+    cif = Path(cmd[-1])
+    source = Path(__file__).parent / "data/zeopp/test_structure.res"
+    shutil.copyfile(source, cif.with_suffix(".res"))
+    return MagicMock(returncode=0, stderr="")
+
+
 @pytest.fixture
 def zeopp_data_dir(test_data_dir):
     """Path to the zeopp test data directory."""
@@ -212,7 +219,7 @@ class TestRunZeopp:
                                   sample_cif, tmp_path):
         """Should include -ha flag by default."""
         mock_find.return_value = "/usr/bin/network"
-        mock_run.return_value = MagicMock(returncode=0, stderr="")
+        mock_run.side_effect = _successful_res
 
         run_zeopp(sample_cif, analyses=["res"],
                   output_dir=str(tmp_path / "out"))
@@ -226,7 +233,7 @@ class TestRunZeopp:
     ):
         """Should use bundled UFF.rad when no radii file given."""
         mock_find.return_value = "/usr/bin/network"
-        mock_run.return_value = MagicMock(returncode=0, stderr="")
+        mock_run.side_effect = _successful_res
 
         outdir = tmp_path / "out"
         run_zeopp(sample_cif, analyses=["res"],
@@ -240,7 +247,7 @@ class TestRunZeopp:
     def test_run_no_ha_flag(self, mock_run, mock_find, sample_cif, tmp_path):
         """Should omit -ha flag when ha=False."""
         mock_find.return_value = "/usr/bin/network"
-        mock_run.return_value = MagicMock(returncode=0, stderr="")
+        mock_run.side_effect = _successful_res
 
         run_zeopp(sample_cif, analyses=["res"], ha=False,
                   output_dir=str(tmp_path / "out"))
@@ -253,7 +260,7 @@ class TestRunZeopp:
                                  tmp_path):
         """Should include -r flag and copy radii file to workdir."""
         mock_find.return_value = "/usr/bin/network"
-        mock_run.return_value = MagicMock(returncode=0, stderr="")
+        mock_run.side_effect = _successful_res
 
         # Create a fake radii file
         rad_file = tmp_path / "UFF.rad"

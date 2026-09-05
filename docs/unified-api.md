@@ -94,6 +94,15 @@ Paths in CLI specifications are relative to the specification file. Model names
 remain identifiers unless they resolve to local checkpoint files. Python paths
 are relative to the caller's working directory.
 
+For Zeo++ surface area, volume, and PSD, `channel_radius` controls accessibility
+and `probe_radius` controls sampling. The probe radius must not exceed the
+channel radius; equal radii remain the default. Both APIs pass these values in
+Zeo++'s documented channel/probe order. All requested outputs must be present,
+complete, and finite. Collection accepts multiline channel output and the
+default `.psd_histo` histogram filename, retaining explicitly named legacy
+`.psd` files and existing result keys. See the
+[Zeo++ command and output examples](https://www.zeoplusplus.org/examples.html).
+
 ```bash
 matkit pores --spec pores.json --outdir runs/pores
 matkit prepare --spec pores.json --outdir runs/prepared

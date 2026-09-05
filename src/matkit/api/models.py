@@ -231,6 +231,10 @@ class PoreRequest(RequestBase):
     def unique_analyses(self):
         if len(set(self.analyses)) != len(self.analyses):
             raise ValueError("Analyses must be unique")
+        if {"sa", "vol", "psd"}.intersection(
+            self.analyses
+        ) and self.probe_radius > self.channel_radius:
+            raise ValueError("probe_radius must not exceed channel_radius")
         return self
 
 
