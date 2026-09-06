@@ -49,6 +49,7 @@ class ZeoppResult(TypedDict):
     success: bool
     results: dict
     error: Optional[str]
+    output_dir: Optional[str]
 
 
 class PACMOF2Result(TypedDict):
