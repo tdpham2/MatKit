@@ -1998,7 +1998,7 @@ def zeopp_cli():
     "--outdir",
     default=None,
     type=click.Path(),
-    help="Output directory for result files.",
+    help="Parent for a unique Zeo++ result directory.",
 )
 def zeopp_run(
     cif,
