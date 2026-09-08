@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `conftest.py` for pytest configuration
 
 ### Fixed
+- Legacy MACE optimization imports on ASE 3.28 by preferring `ase.filters`
+  while retaining the `ase.constraints` fallback for older ASE versions
 - Custom cutoff propagation through GCMC unit-cell replication and cached
   batch setup, and successful RASPA2 parsing incorrectly reporting failure
 - **MACE optimizer bug**: `geo_opt_cell_opt` mode called `dyn1.run()` instead of `dyn.run()` for cell optimization step, meaning the cell was never actually optimized

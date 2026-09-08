@@ -1,11 +1,15 @@
 import logging
 from pathlib import Path
 
-from ase.constraints import ExpCellFilter
 from ase.io import read as ase_read
 from ase.io import write as ase_write
 from ase.optimize import BFGS
 from mace.calculators import mace_mp
+
+try:
+    from ase.filters import ExpCellFilter
+except ImportError:
+    from ase.constraints import ExpCellFilter
 
 logger = logging.getLogger(__name__)
 
