@@ -5,6 +5,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import shutil
+import tempfile
 
 from matkit.zeopp.zeopp import (
     _find_network_binary,
@@ -153,9 +154,7 @@ class TestGetOutputData:
 
     def test_single_file_mode(self, zeopp_data_dir):
         """Should parse a single output file directly."""
-        result = get_output_data(
-            str(zeopp_data_dir / "test_structure.res")
-        )
+        result = get_output_data(str(zeopp_data_dir / "test_structure.res"))
         assert result["success"] is True
         assert "res" in result
 
@@ -168,6 +167,21 @@ class TestGetOutputData:
         """Should raise ValueError for invalid analysis type."""
         with pytest.raises(ValueError, match="Invalid analysis"):
             get_output_data(str(zeopp_data_dir), analyses=["invalid"])
+
+    @pytest.mark.parametrize("analyses", [None, ["res"]])
+    def test_mixed_structure_stems_raise(
+        self, analyses, zeopp_data_dir, tmp_path
+    ):
+        """Should never combine analyses from different structures."""
+        shutil.copyfile(
+            zeopp_data_dir / "test_structure.res", tmp_path / "a.res"
+        )
+        shutil.copyfile(zeopp_data_dir / "test_structure.sa", tmp_path / "b.sa")
+
+        with pytest.raises(
+            ValueError, match=r"Multiple Zeo\+\+ structure stems"
+        ):
+            get_output_data(str(tmp_path), analyses=analyses)
 
 
 class TestRunZeopp:
@@ -185,8 +199,9 @@ class TestRunZeopp:
 
     @patch("matkit.zeopp.zeopp._find_network_binary")
     @patch("matkit.zeopp.zeopp.subprocess.run")
-    def test_run_res_analysis(self, mock_run, mock_find, sample_cif,
-                              zeopp_data_dir, tmp_path):
+    def test_run_res_analysis(
+        self, mock_run, mock_find, sample_cif, zeopp_data_dir, tmp_path
+    ):
         """Should run network binary and parse .res output."""
         mock_find.return_value = "/usr/bin/network"
 
@@ -210,37 +225,43 @@ class TestRunZeopp:
             output_dir=str(tmp_path / "out"),
         )
         assert result["success"] is True
+        assert Path(result["output_dir"]).parent == tmp_path / "out"
         assert "res" in result["results"]
         assert result["results"]["res"]["Di"] == pytest.approx(18.569)
 
     @patch("matkit.zeopp.zeopp._find_network_binary")
     @patch("matkit.zeopp.zeopp.subprocess.run")
-    def test_run_includes_ha_flag(self, mock_run, mock_find,
-                                  sample_cif, tmp_path):
+    def test_run_includes_ha_flag(
+        self, mock_run, mock_find, sample_cif, tmp_path
+    ):
         """Should include -ha flag by default."""
         mock_find.return_value = "/usr/bin/network"
         mock_run.side_effect = _successful_res
 
-        run_zeopp(sample_cif, analyses=["res"],
-                  output_dir=str(tmp_path / "out"))
+        run_zeopp(
+            sample_cif, analyses=["res"], output_dir=str(tmp_path / "out")
+        )
         cmd = mock_run.call_args[0][0]
         assert "-ha" in cmd
 
     @patch("matkit.zeopp.zeopp._find_network_binary")
     @patch("matkit.zeopp.zeopp.subprocess.run")
     def test_run_uses_bundled_radii_by_default(
-        self, mock_run, mock_find, sample_cif, tmp_path,
+        self,
+        mock_run,
+        mock_find,
+        sample_cif,
+        tmp_path,
     ):
         """Should use bundled UFF.rad when no radii file given."""
         mock_find.return_value = "/usr/bin/network"
         mock_run.side_effect = _successful_res
 
         outdir = tmp_path / "out"
-        run_zeopp(sample_cif, analyses=["res"],
-                  output_dir=str(outdir))
+        result = run_zeopp(sample_cif, analyses=["res"], output_dir=str(outdir))
         cmd = mock_run.call_args[0][0]
         assert "-r" in cmd
-        assert (outdir / "UFF.rad").exists()
+        assert (Path(result["output_dir"]) / "UFF.rad").exists()
 
     @patch("matkit.zeopp.zeopp._find_network_binary")
     @patch("matkit.zeopp.zeopp.subprocess.run")
@@ -249,15 +270,20 @@ class TestRunZeopp:
         mock_find.return_value = "/usr/bin/network"
         mock_run.side_effect = _successful_res
 
-        run_zeopp(sample_cif, analyses=["res"], ha=False,
-                  output_dir=str(tmp_path / "out"))
+        run_zeopp(
+            sample_cif,
+            analyses=["res"],
+            ha=False,
+            output_dir=str(tmp_path / "out"),
+        )
         cmd = mock_run.call_args[0][0]
         assert "-ha" not in cmd
 
     @patch("matkit.zeopp.zeopp._find_network_binary")
     @patch("matkit.zeopp.zeopp.subprocess.run")
-    def test_run_with_radii_file(self, mock_run, mock_find, sample_cif,
-                                 tmp_path):
+    def test_run_with_radii_file(
+        self, mock_run, mock_find, sample_cif, tmp_path
+    ):
         """Should include -r flag and copy radii file to workdir."""
         mock_find.return_value = "/usr/bin/network"
         mock_run.side_effect = _successful_res
@@ -267,14 +293,78 @@ class TestRunZeopp:
         rad_file.write_text("H 1.0\nC 1.7\n")
 
         outdir = tmp_path / "out"
-        run_zeopp(sample_cif, analyses=["res"],
-                  radii_file=str(rad_file),
-                  output_dir=str(outdir))
+        result = run_zeopp(
+            sample_cif,
+            analyses=["res"],
+            radii_file=str(rad_file),
+            output_dir=str(outdir),
+        )
 
         cmd = mock_run.call_args[0][0]
         assert "-r" in cmd
         # Radii file should be copied to workdir
-        assert (outdir / "UFF.rad").exists()
+        assert (Path(result["output_dir"]) / "UFF.rad").exists()
+
+    @patch("matkit.zeopp.zeopp._find_network_binary")
+    @patch("matkit.zeopp.zeopp.subprocess.run")
+    def test_repeated_runs_use_unique_directories(
+        self, mock_run, mock_find, sample_cif, tmp_path
+    ):
+        """Should preserve each persistent run in a separate directory."""
+        mock_find.return_value = "/usr/bin/network"
+        mock_run.side_effect = _successful_res
+        parent = tmp_path / "out"
+
+        first = run_zeopp(sample_cif, output_dir=str(parent))
+        second = run_zeopp(sample_cif, output_dir=str(parent))
+
+        first_dir = Path(first["output_dir"])
+        second_dir = Path(second["output_dir"])
+        assert first_dir != second_dir
+        assert first_dir.parent == second_dir.parent == parent
+        assert (first_dir / f"{Path(sample_cif).stem}.res").is_file()
+        assert (second_dir / f"{Path(sample_cif).stem}.res").is_file()
+
+    @patch("matkit.zeopp.zeopp._find_network_binary")
+    @patch("matkit.zeopp.zeopp.subprocess.run")
+    def test_temporary_run_is_removed(
+        self, mock_run, mock_find, sample_cif, tmp_path, monkeypatch
+    ):
+        """Should not advertise an automatically deleted run directory."""
+        mock_find.return_value = "/usr/bin/network"
+        mock_run.side_effect = _successful_res
+        original_mkdtemp = tempfile.mkdtemp
+
+        def local_mkdtemp(*, prefix, dir=None):
+            return original_mkdtemp(prefix=prefix, dir=tmp_path)
+
+        monkeypatch.setattr(tempfile, "mkdtemp", local_mkdtemp)
+        result = run_zeopp(sample_cif)
+
+        assert result["success"] is True
+        assert result["output_dir"] is None
+        assert list(tmp_path.iterdir()) == []
+
+    @patch("matkit.zeopp.zeopp._find_network_binary")
+    @patch("matkit.zeopp.zeopp.subprocess.run")
+    def test_stale_parent_output_is_not_reused(
+        self, mock_run, mock_find, sample_cif, zeopp_data_dir, tmp_path
+    ):
+        """A zero-exit process must produce outputs in its own run directory."""
+        mock_find.return_value = "/usr/bin/network"
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
+        parent = tmp_path / "out"
+        parent.mkdir()
+        stale = parent / f"{Path(sample_cif).stem}.res"
+        shutil.copyfile(zeopp_data_dir / "test_structure.res", stale)
+
+        with pytest.raises(ValueError, match="Missing requested"):
+            run_zeopp(sample_cif, output_dir=str(parent))
+
+        assert stale.is_file()
+        run_dirs = list(parent.glob(f"{Path(sample_cif).stem}-zeopp-*"))
+        assert len(run_dirs) == 1
+        assert not (run_dirs[0] / stale.name).exists()
 
     def test_run_missing_radii_file_raises(self, sample_cif):
         """Should raise FileNotFoundError for missing radii file."""
@@ -283,14 +373,19 @@ class TestRunZeopp:
 
     @patch("matkit.zeopp.zeopp._find_network_binary")
     @patch("matkit.zeopp.zeopp.subprocess.run")
-    def test_run_failure_raises(self, mock_run, mock_find, sample_cif):
+    def test_run_failure_raises(
+        self, mock_run, mock_find, sample_cif, tmp_path
+    ):
         """Should raise ValueError when network binary fails."""
         mock_find.return_value = "/usr/bin/network"
         mock_run.return_value = MagicMock(
             returncode=1, stderr="Error: bad input"
         )
         with pytest.raises(ValueError, match="network failed"):
-            run_zeopp(sample_cif, output_dir="/tmp/zeopp_test_fail")
+            run_zeopp(sample_cif, output_dir=str(tmp_path / "failed"))
+        run_dirs = list((tmp_path / "failed").iterdir())
+        assert len(run_dirs) == 1
+        assert (run_dirs[0] / Path(sample_cif).name).is_file()
 
 
 class TestRunBatch:
@@ -309,11 +404,14 @@ class TestRunBatch:
             "success": True,
             "results": {
                 "res": {
-                    "Di": 10.0, "Df": 5.0,
-                    "Dif": 7.0, "unit": "Angstrom",
+                    "Di": 10.0,
+                    "Df": 5.0,
+                    "Dif": 7.0,
+                    "unit": "Angstrom",
                 },
             },
             "error": None,
+            "output_dir": str(tmp_path / "artifact"),
         }
 
         outdir = tmp_path / "out"
@@ -334,6 +432,7 @@ class TestRunBatch:
 
         for rec in records:
             assert rec["status"] == "success"
+            assert rec["output_dir"] == str(tmp_path / "artifact")
             assert rec["Di"] == 10.0
             assert rec["Df"] == 5.0
 
@@ -352,11 +451,14 @@ class TestRunBatch:
                 "success": True,
                 "results": {
                     "res": {
-                        "Di": 10.0, "Df": 5.0,
-                        "Dif": 7.0, "unit": "Angstrom",
+                        "Di": 10.0,
+                        "Df": 5.0,
+                        "Dif": 7.0,
+                        "unit": "Angstrom",
                     },
                 },
                 "error": None,
+                "output_dir": str(tmp_path / "artifact"),
             }
 
         mock_run.side_effect = side_effect

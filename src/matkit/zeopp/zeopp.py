@@ -73,6 +73,20 @@ def _output_path(directory: Path, stem: str, analysis: str) -> Path:
     return next((path for path in candidates if path.is_file()), candidates[0])
 
 
+def _output_inventory(directory: Path) -> dict[str, dict[str, Path]]:
+    """Group recognized Zeo++ outputs by their structure stem."""
+    inventory: dict[str, dict[str, Path]] = {}
+    for analysis, suffixes in _OUTPUT_SUFFIXES.items():
+        for suffix in suffixes:
+            for path in sorted(directory.glob(f"*{suffix}")):
+                if not path.is_file():
+                    continue
+                stem = path.name.removesuffix(suffix)
+                # Suffix order is significant for PSD: prefer .psd_histo.
+                inventory.setdefault(stem, {}).setdefault(analysis, path)
+    return inventory
+
+
 def _find_network_binary(network_path: str | None = None) -> str:
     """Locate the Zeo++ network binary.
 
@@ -368,7 +382,8 @@ def get_output_data(
     """Parse pre-existing Zeo++ output files.
 
     Args:
-        output_path: Path to directory containing Zeo++ output files.
+        output_path: Path to one Zeo++ output file or a directory containing
+            output files for exactly one structure stem.
         analyses: Which analyses to parse. If None, auto-detects from
             available files (.res, .sa, .vol, .psd_histo, .psd, .chan).
 
@@ -377,7 +392,8 @@ def get_output_data(
 
     Raises:
         FileNotFoundError: If output_path does not exist.
-        ValueError: If specified analyses are invalid or parsing fails.
+        ValueError: If specified analyses are invalid, directory outputs have
+            multiple structure stems, or parsing fails.
     """
     outdir = Path(output_path)
     if not outdir.exists():
@@ -403,16 +419,21 @@ def get_output_data(
             results["success"] = True
         return results
 
-    # Directory mode: find output files
-    detect = analyses if analyses is not None else list(VALID_ANALYSES)
+    # Directory mode: all analyses must belong to one structure. Selecting
+    # matches independently can silently combine stale, unrelated results.
+    inventory = _output_inventory(outdir)
+    if len(inventory) > 1:
+        stems = ", ".join(sorted(inventory))
+        raise ValueError(
+            "Multiple Zeo++ structure stems found in output directory: "
+            f"{stems}. Use a single-structure directory or a direct file path."
+        )
+
+    available = next(iter(inventory.values()), {})
+    detect = analyses if analyses is not None else sorted(available)
     for analysis in detect:
-        matches = [
-            path
-            for suffix in _OUTPUT_SUFFIXES[analysis]
-            for path in sorted(outdir.glob(f"*{suffix}"))
-        ]
-        if matches:
-            results[analysis] = _parse_output(matches[0], analysis)
+        if analysis in available:
+            results[analysis] = _parse_output(available[analysis], analysis)
         elif analyses is not None:
             raise ValueError(f"Missing requested Zeo++ analysis: {analysis}")
 
@@ -450,12 +471,12 @@ def run_zeopp(
             Passed via -r flag. Defaults to the bundled
             UFF.rad if None.
         network_path: Explicit path to the network binary.
-        output_dir: Directory for output files. Uses a temp directory
-            if None.
+        output_dir: Parent directory for a unique, persistent run directory.
+            Uses an automatically deleted temporary directory if None.
 
     Returns:
-        Dict with 'success', 'results' (per-analysis sub-dicts), and
-        'error' keys.
+        Dict with 'success', 'results' (per-analysis sub-dicts), 'error',
+        and 'output_dir'. The output directory is None for temporary runs.
 
     Raises:
         FileNotFoundError: If the CIF file, radii file, or network
@@ -488,8 +509,11 @@ def run_zeopp(
     if use_temp:
         workdir = Path(tempfile.mkdtemp(prefix="zeopp_"))
     else:
-        workdir = Path(output_dir)
-        workdir.mkdir(parents=True, exist_ok=True)
+        output_parent = Path(output_dir).expanduser().resolve()
+        output_parent.mkdir(parents=True, exist_ok=True)
+        workdir = Path(
+            tempfile.mkdtemp(prefix=f"{cifpath.stem}-zeopp-", dir=output_parent)
+        )
 
     try:
         # Copy CIF to working directory
@@ -521,7 +545,12 @@ def run_zeopp(
             )
 
         # Parse output files
-        result = {"success": False, "results": {}, "error": None}
+        result = {
+            "success": False,
+            "results": {},
+            "error": None,
+            "output_dir": None if use_temp else str(workdir),
+        }
         stem = cif_dest.stem
         for analysis in analyses:
             out_file = _output_path(workdir, stem, analysis)
@@ -578,7 +607,8 @@ def run_batch(
 
     Args:
         cif_dir: Directory containing CIF files.
-        output_dir: Directory for output files and results.jsonl.
+        output_dir: Parent directory for unique per-structure run directories
+            and results.jsonl.
         analyses: Analysis types to run. Defaults to ['res'].
         probe_radius: Probe molecule radius in Angstrom.
         chan_radius: Channel radius in Angstrom.
@@ -628,6 +658,7 @@ def run_batch(
             record = {
                 "structure": stem,
                 "status": "success",
+                "output_dir": result["output_dir"],
             }
             record.update(_flatten_results(result["results"]))
             return record

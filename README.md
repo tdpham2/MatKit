@@ -205,12 +205,14 @@ result = run_zeopp(
     analyses=["res", "sa"],
     radii_file="UFF.rad",
     num_samples=100000,
+    output_dir="zeopp_runs",
 )
 print(result["results"]["res"])   # {'Di': 18.5, 'Df': 8.0, 'Dif': 10.9, ...}
 print(result["results"]["sa"])    # {'ASA': 4004.7, 'ASA_m2_g': 3918.3, ...}
+print(result["output_dir"])        # unique persistent directory for this run
 
-# Parse existing Zeo++ output files
-result = get_output_data("output_dir/")
+# Parse output files for one structure/run
+result = get_output_data(result["output_dir"])
 
 # Agent-free, runtime-selectable MLIP execution
 from matkit.mlip import (
