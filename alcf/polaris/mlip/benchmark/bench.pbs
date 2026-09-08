@@ -1,0 +1,59 @@
+#!/bin/bash -l
+#PBS -N matkit-mlip-bench
+#PBS -l select=1:system=polaris
+#PBS -l place=scatter
+#PBS -l walltime=01:00:00
+#PBS -l filesystems=home:eagle
+#PBS -q debug
+#PBS -A PROJECT
+
+# Single-GPU throughput benchmark for MatKit MLIP backends.
+# Submit from the MatKit checkout:
+#   qsub -v MATKIT_MLIP_ENV="$MATKIT_MLIP_ENV" alcf/polaris/mlip/benchmark/bench.pbs
+# Override inputs/checkpoint/output as needed, e.g.:
+#   qsub -v MATKIT_MLIP_ENV=...,MATKIT_BENCH_INPUT=/path/to.cif,\
+#   MACE_CHECKPOINT=medium alcf/polaris/mlip/benchmark/bench.pbs
+
+set -euo pipefail
+
+: "${MATKIT_MLIP_ENV:?Submit with -v MATKIT_MLIP_ENV=/path/to/env}"
+
+MATKIT_REPO="${MATKIT_REPO:-${PBS_O_WORKDIR}}"
+INPUT_FILE="${MATKIT_BENCH_INPUT:-${MATKIT_REPO}/tests/data/test_structure.cif}"
+OUTPUT_DIR="${MATKIT_BENCH_OUTPUT:-${MATKIT_REPO}/projects/mlip_bench_${PBS_JOBID}}"
+MACE_CHECKPOINT="${MACE_CHECKPOINT:-medium}"
+DRIVER="${MATKIT_BENCH_DRIVER:-energy}"
+
+module use /soft/modulefiles
+module load conda/2025-09-25
+source "${MATKIT_MLIP_ENV}/bin/activate"
+
+export HTTP_PROXY="http://proxy.alcf.anl.gov:3128"
+export HTTPS_PROXY="http://proxy.alcf.anl.gov:3128"
+export http_proxy="${HTTP_PROXY}"
+export https_proxy="${HTTPS_PROXY}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
+
+cd "${MATKIT_REPO}"
+
+# Pre-warm model weights so downloads do not pollute timed runs. A throwaway
+# single-structure batch forces the checkpoint to resolve before the sweeps.
+python -m matkit.cli mlip run \
+    --backend nvalchemi-mace \
+    --checkpoint "${MACE_CHECKPOINT}" \
+    --device cuda \
+    --dtype float32 \
+    --driver energy \
+    --input "${INPUT_FILE}" \
+    --output "${OUTPUT_DIR}_warmup/result.json" || true
+
+python alcf/polaris/mlip/benchmark/bench.py \
+    --input "${INPUT_FILE}" \
+    --output-dir "${OUTPUT_DIR}" \
+    --checkpoint "${MACE_CHECKPOINT}" \
+    --driver "${DRIVER}" \
+    --backends nvalchemi-mace ase-mace \
+    --n-structures "${MATKIT_BENCH_NSTRUCT:-64}" \
+    --batch-sizes ${MATKIT_BENCH_BATCH_SIZES:-1 2 4 8 16 32 64} \
+    --size-factors ${MATKIT_BENCH_SIZE_FACTORS:-1 2 3}

@@ -1,0 +1,56 @@
+#!/bin/bash -l
+#PBS -N matkit-mlip-bench-4gpu
+#PBS -l select=1:system=polaris
+#PBS -l place=scatter
+#PBS -l walltime=01:00:00
+#PBS -l filesystems=home:eagle
+#PBS -q debug
+#PBS -A PROJECT
+
+# Node-level (4x A100) throughput benchmark. One process per GPU over a sharded
+# input set. Submit from the MatKit checkout:
+#   qsub -v MATKIT_MLIP_ENV="$MATKIT_MLIP_ENV" \
+#     alcf/polaris/mlip/benchmark/bench_multigpu.pbs
+
+set -euo pipefail
+
+: "${MATKIT_MLIP_ENV:?Submit with -v MATKIT_MLIP_ENV=/path/to/env}"
+
+MATKIT_REPO="${MATKIT_REPO:-${PBS_O_WORKDIR}}"
+INPUT_FILE="${MATKIT_BENCH_INPUT:-${MATKIT_REPO}/tests/data/test_structure.cif}"
+OUTPUT_DIR="${MATKIT_BENCH_OUTPUT:-${MATKIT_REPO}/projects/mlip_bench_4gpu_${PBS_JOBID}}"
+MACE_CHECKPOINT="${MACE_CHECKPOINT:-medium}"
+
+module use /soft/modulefiles
+module load conda/2025-09-25
+source "${MATKIT_MLIP_ENV}/bin/activate"
+
+export HTTP_PROXY="http://proxy.alcf.anl.gov:3128"
+export HTTPS_PROXY="http://proxy.alcf.anl.gov:3128"
+export http_proxy="${HTTP_PROXY}"
+export https_proxy="${HTTPS_PROXY}"
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
+# Do NOT pin CUDA_VISIBLE_DEVICES here; bench_multigpu.py sets it per worker.
+unset CUDA_VISIBLE_DEVICES || true
+
+cd "${MATKIT_REPO}"
+
+# Pre-warm weights on one GPU before the sharded run.
+CUDA_VISIBLE_DEVICES=0 python -m matkit.cli mlip run \
+    --backend nvalchemi-mace \
+    --checkpoint "${MACE_CHECKPOINT}" \
+    --device cuda \
+    --dtype float32 \
+    --driver energy \
+    --input "${INPUT_FILE}" \
+    --output "${OUTPUT_DIR}_warmup/result.json" || true
+
+python alcf/polaris/mlip/benchmark/bench_multigpu.py \
+    --input "${INPUT_FILE}" \
+    --output-dir "${OUTPUT_DIR}" \
+    --n-gpus "${MATKIT_BENCH_NGPUS:-4}" \
+    --backend nvalchemi-mace \
+    --checkpoint "${MACE_CHECKPOINT}" \
+    --driver "${MATKIT_BENCH_DRIVER:-energy}" \
+    --n-structures "${MATKIT_BENCH_NSTRUCT:-256}" \
+    --batch-size "${MATKIT_BENCH_BATCH_SIZE:-16}"

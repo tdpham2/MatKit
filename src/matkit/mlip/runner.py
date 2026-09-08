@@ -373,6 +373,12 @@ def _nvalchemi_result(
         stress = data.stress.detach().cpu().numpy()
         if stress.shape == (1, 3, 3):
             stress = stress[0]
+    if calculation.driver == "opt":
+        n_steps = None
+    elif calculation.driver == "md":
+        n_steps = calculation.md_steps
+    else:
+        n_steps = 0
     return _success_result(
         input_file,
         backend,
@@ -382,9 +388,54 @@ def _nvalchemi_result(
         forces,
         stress,
         converged,
-        None if calculation.driver == "opt" else 0,
+        n_steps,
         time.perf_counter() - started,
     )
+
+
+# Integration seam. The NVIDIA ALCHEMI MD integrator class names in
+# nvalchemi.dynamics are NOT verifiable off-GPU (the package installs only with
+# a CUDA extra). Confirm the real names on the target platform with
+#   python -c "import nvalchemi.dynamics as d; print(dir(d))"
+# and update this mapping if they differ. Each class must accept the keyword
+# arguments assembled in _nvalchemi_md_dynamics and expose the same
+# context-manager + run(batch) protocol as BaseDynamics/FIRE.
+_NVALCHEMI_MD_INTEGRATORS = {
+    "nve": "VelocityVerlet",
+    "nvt": "Langevin",
+}
+
+
+def _nvalchemi_md_dynamics(
+    dynamics_module,
+    model,
+    hooks,
+    backend: NVAlchemiMACEConfig,
+    calculation: MLIPCalculationConfig,
+):
+    """Construct a batched MD integrator from nvalchemi.dynamics.
+
+    Isolated so adapting to the confirmed ALCHEMI MD API is a localized change.
+    """
+    ensemble = calculation.ensemble
+    class_name = _NVALCHEMI_MD_INTEGRATORS[ensemble]
+    integrator = getattr(dynamics_module, class_name, None)
+    if integrator is None:
+        raise RuntimeError(
+            f"nvalchemi.dynamics has no {class_name!r} integrator for the "
+            f"{ensemble!r} ensemble; confirm the class name on this platform "
+            "and update _NVALCHEMI_MD_INTEGRATORS."
+        )
+    kwargs = {
+        "model": model,
+        "hooks": hooks,
+        "dt": calculation.timestep,
+        "n_steps": calculation.md_steps,
+        "temperature": calculation.temperature,
+    }
+    if ensemble == "nvt":
+        kwargs["friction"] = calculation.friction
+    return integrator(**kwargs)
 
 
 def _run_nvalchemi_chunk(
@@ -394,6 +445,7 @@ def _run_nvalchemi_chunk(
     calculation: MLIPCalculationConfig,
 ) -> list[tuple[int, dict[str, Any]]]:
     try:
+        import nvalchemi.dynamics as nvalchemi_dynamics
         from nvalchemi.data import Batch
         from nvalchemi.dynamics import BaseDynamics, ConvergenceHook, FIRE
     except ImportError as exc:
@@ -411,6 +463,10 @@ def _run_nvalchemi_chunk(
     convergence = None
     if calculation.driver == "energy":
         dynamics = BaseDynamics(model=model, hooks=hooks, n_steps=1)
+    elif calculation.driver == "md":
+        dynamics = _nvalchemi_md_dynamics(
+            nvalchemi_dynamics, model, hooks, backend, calculation
+        )
     else:
         convergence = ConvergenceHook.from_fmax(calculation.fmax)
         dynamics = FIRE(
@@ -533,6 +589,13 @@ def _validate_execution_request(
         and calculation.optimizer != "fire"
     ):
         raise ValueError("NVIDIA ALCHEMI supports only the FIRE optimizer")
+    if calculation.driver == "md" and not isinstance(
+        backend, NVAlchemiMACEConfig
+    ):
+        raise ValueError(
+            "MD driver is currently supported only by the "
+            "nvalchemi-mace backend"
+        )
 
 
 def _execute_inputs(

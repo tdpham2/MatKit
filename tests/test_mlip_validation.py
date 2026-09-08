@@ -73,6 +73,36 @@ def test_integer_limits(copper, tmp_path, value):
             )
 
 
+def test_md_config_fields_validated():
+    MLIPCalculationConfig(driver="md", ensemble="nve")
+    MLIPCalculationConfig(driver="md", ensemble="nvt")
+    with pytest.raises(ValueError, match="ensemble"):
+        MLIPCalculationConfig(ensemble="npt")
+    with pytest.raises(ValueError, match="temperature"):
+        MLIPCalculationConfig(temperature=0)
+    with pytest.raises(ValueError, match="timestep"):
+        MLIPCalculationConfig(timestep=float("nan"))
+    with pytest.raises(ValueError, match="md_steps"):
+        MLIPCalculationConfig(md_steps=0)
+    with pytest.raises(ValueError, match="friction"):
+        MLIPCalculationConfig(friction=-1)
+
+
+def test_unknown_driver_rejected():
+    with pytest.raises(ValueError, match="driver"):
+        MLIPCalculationConfig(driver="npt")
+
+
+def test_md_driver_requires_nvalchemi_backend(copper, tmp_path):
+    with pytest.raises(ValueError, match="MD driver"):
+        run_mlip_batch(
+            [copper],
+            ASEMACEConfig(),
+            MLIPCalculationConfig(driver="md"),
+            output_dir=tmp_path / "md",
+        )
+
+
 def test_rootstock_kwargs_must_be_serializable():
     for value in (float("nan"), object()):
         with pytest.raises(ValueError, match="finite JSON"):

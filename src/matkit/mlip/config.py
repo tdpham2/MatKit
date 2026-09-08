@@ -11,6 +11,8 @@ from typing import Any, Literal, TypeAlias
 
 _DTYPES = {"float32", "float64"}
 _OPTIMIZERS = {"bfgs", "lbfgs", "gpmin", "fire", "mdmin"}
+_DRIVERS = {"energy", "opt", "md"}
+_ENSEMBLES = {"nve", "nvt"}
 
 
 def _positive_number(name: str, value: Any) -> None:
@@ -48,6 +50,11 @@ def _validate_explicit_options(
             "enable_cueq",
             "batch_size",
             "max_atoms",
+            "ensemble",
+            "temperature",
+            "timestep",
+            "md_steps",
+            "friction",
         },
     }
     for owner, names in backend_options.items():
@@ -65,11 +72,19 @@ def _validate_explicit_options(
             raise ValueError("--dtype is controlled by the mace_anicc factory")
     if "dispersion" in provided and calculator_type != "mace_mp":
         raise ValueError("--dispersion requires --calculator-type mace_mp")
-    if driver == "energy":
-        opt_only = provided & {"optimizer", "fmax", "steps", "dt"}
-        if opt_only:
-            flag = sorted(opt_only)[0].replace("_", "-")
+    # dt is the ALCHEMI FIRE timestep; MD uses the separate --timestep instead.
+    md_only = {"ensemble", "temperature", "timestep", "md_steps", "friction"}
+    opt_only = {"optimizer", "fmax", "steps", "dt"}
+    if driver != "opt":
+        used = provided & opt_only
+        if used:
+            flag = sorted(used)[0].replace("_", "-")
             raise ValueError(f"--{flag} requires --driver opt")
+    if driver != "md":
+        used = provided & md_only
+        if used:
+            flag = sorted(used)[0].replace("_", "-")
+            raise ValueError(f"--{flag} requires --driver md")
 
 
 @dataclass(frozen=True)
@@ -168,20 +183,37 @@ MLIPBackendConfig: TypeAlias = (
 
 @dataclass(frozen=True)
 class MLIPCalculationConfig:
-    """Calculation settings shared by all MLIP backends."""
+    """Calculation settings shared by all MLIP backends.
 
-    driver: Literal["energy", "opt"] = "energy"
+    ``opt``-only fields (``optimizer``, ``fmax``) and ``md``-only fields
+    (``ensemble``, ``temperature``, ``timestep``, ``md_steps``, ``friction``)
+    are ignored by the other drivers. Batched MD is currently implemented on the
+    ``nvalchemi-mace`` backend only.
+    """
+
+    driver: Literal["energy", "opt", "md"] = "energy"
     optimizer: Literal["bfgs", "lbfgs", "gpmin", "fire", "mdmin"] = "fire"
     fmax: float = 0.01
     steps: int = 1000
+    ensemble: Literal["nve", "nvt"] = "nvt"
+    temperature: float = 300.0
+    timestep: float = 1.0
+    md_steps: int = 1000
+    friction: float = 0.01
 
     def __post_init__(self) -> None:
-        if self.driver not in {"energy", "opt"}:
+        if self.driver not in _DRIVERS:
             raise ValueError(f"Unsupported MLIP driver: {self.driver}")
         if self.optimizer not in _OPTIMIZERS:
             raise ValueError(f"Unsupported ASE optimizer: {self.optimizer}")
+        if self.ensemble not in _ENSEMBLES:
+            raise ValueError(f"Unsupported MD ensemble: {self.ensemble}")
         _positive_number("fmax", self.fmax)
         _positive_integer("steps", self.steps)
+        _positive_number("temperature", self.temperature)
+        _positive_number("timestep", self.timestep)
+        _positive_integer("md_steps", self.md_steps)
+        _positive_number("friction", self.friction)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

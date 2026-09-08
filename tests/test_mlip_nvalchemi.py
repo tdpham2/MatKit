@@ -126,13 +126,19 @@ def alchemi(monkeypatch):
                 data.energy = Tensor([[index + 1.25]])
                 data.forces = Tensor(np.zeros((data.num_nodes, 3)))
                 data.stress = Tensor(np.eye(3)[None])
-                if isinstance(self, FIRE):
+                if isinstance(self, (FIRE, VelocityVerlet, Langevin)):
                     data.positions = Tensor(data.positions.numpy() + 0.1)
                 if state.corrupt and index == 1:
                     state.corrupt(data)
             return batch
 
     class FIRE(BaseDynamics):
+        pass
+
+    class VelocityVerlet(BaseDynamics):
+        pass
+
+    class Langevin(BaseDynamics):
         pass
 
     class ConvergenceHook:
@@ -147,7 +153,13 @@ def alchemi(monkeypatch):
     modules["nvalchemi.data"].AtomicData = AtomicData
     modules["nvalchemi.data"].Batch = Batch
     modules["nvalchemi.models.mace"].MACEWrapper = MACEWrapper
-    for cls in (BaseDynamics, FIRE, ConvergenceHook):
+    for cls in (
+        BaseDynamics,
+        FIRE,
+        VelocityVerlet,
+        Langevin,
+        ConvergenceHook,
+    ):
         setattr(modules["nvalchemi.dynamics"], cls.__name__, cls)
     state.model = Model()
     return state
@@ -230,6 +242,48 @@ def test_dynamics_and_result_mapping(alchemi, driver):
     if driver == "opt":
         assert settings["dt"] == 0.2
         assert ("fmax", 0.02) in alchemi.events
+
+
+@pytest.mark.parametrize(
+    "ensemble,integrator",
+    [("nvt", "Langevin"), ("nve", "VelocityVerlet")],
+)
+def test_md_driver_selects_integrator_and_maps_results(
+    alchemi, ensemble, integrator
+):
+    inputs = entries()
+    backend = NVAlchemiMACEConfig("medium")
+    calculation = MLIPCalculationConfig(
+        driver="md",
+        ensemble=ensemble,
+        temperature=250.0,
+        timestep=2.0,
+        md_steps=5,
+        friction=0.05,
+    )
+    outputs = runner._run_nvalchemi_chunk(
+        alchemi.model, inputs, backend, calculation
+    )
+    assert [index for index, _ in outputs] == [3, 7]
+    settings = next(
+        event[1] for event in alchemi.events if event[0] == integrator
+    )
+    assert settings["n_steps"] == 5
+    assert settings["dt"] == 2.0
+    assert settings["temperature"] == 250.0
+    if ensemble == "nvt":
+        assert settings["friction"] == 0.05
+    else:
+        assert "friction" not in settings
+    for (_, result), (_, _, original) in zip(outputs, inputs):
+        assert result["success"]
+        # MD integrators advance positions and report step count, not
+        # convergence.
+        assert result["converged"] is True
+        assert result["n_steps"] == 5
+        assert np.allclose(
+            result["final_structure"]["positions"], original.positions + 0.1
+        )
 
 
 @pytest.mark.parametrize(

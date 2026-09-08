@@ -171,6 +171,21 @@ class TestCLI:
             "only the FIRE optimizer",
         ),
         ("ase-mace", ["--driver", "opt", "--fmax", "nan"], "finite"),
+        (
+            "nvalchemi-mace",
+            ["--temperature", "300"],
+            "requires --driver md",
+        ),
+        (
+            "nvalchemi-mace",
+            ["--driver", "energy", "--ensemble", "nve"],
+            "requires --driver md",
+        ),
+        (
+            "ase-mace",
+            ["--driver", "md"],
+            "nvalchemi-mace",
+        ),
     ],
 )
 def test_mlip_rejects_unsupported_explicit_options(
