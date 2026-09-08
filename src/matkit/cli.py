@@ -1044,7 +1044,7 @@ def _mlip_options(function):
             "--driver",
             default="energy",
             show_default=True,
-            type=click.Choice(["energy", "opt"]),
+            type=click.Choice(["energy", "opt", "md"]),
         ),
         click.option(
             "--optimizer",
@@ -1115,6 +1115,41 @@ def _mlip_options(function):
             "--enable-cueq",
             is_flag=True,
             help="Enable cuEquivariance in ALCHEMI MACE.",
+        ),
+        click.option(
+            "--ensemble",
+            default="nvt",
+            show_default=True,
+            type=click.Choice(["nve", "nvt"]),
+            help="MD ensemble (--driver md).",
+        ),
+        click.option(
+            "--temperature",
+            default=300.0,
+            show_default=True,
+            type=float,
+            help="MD target temperature in Kelvin (--driver md).",
+        ),
+        click.option(
+            "--timestep",
+            default=1.0,
+            show_default=True,
+            type=float,
+            help="MD timestep in femtoseconds (--driver md).",
+        ),
+        click.option(
+            "--md-steps",
+            default=1000,
+            show_default=True,
+            type=int,
+            help="Number of MD steps (--driver md).",
+        ),
+        click.option(
+            "--friction",
+            default=0.01,
+            show_default=True,
+            type=float,
+            help="Langevin friction for NVT (--driver md).",
         ),
     ]
     for decorator in reversed(decorators):
@@ -1204,6 +1239,11 @@ def _build_mlip_configs(options):
         optimizer=options["optimizer"],
         fmax=options["fmax"],
         steps=options["steps"],
+        ensemble=options["ensemble"],
+        temperature=options["temperature"],
+        timestep=options["timestep"],
+        md_steps=options["md_steps"],
+        friction=options["friction"],
     )
     if (
         backend_name == "nvalchemi-mace"
@@ -1211,6 +1251,10 @@ def _build_mlip_configs(options):
         and calculation.optimizer != "fire"
     ):
         raise ValueError("NVIDIA ALCHEMI supports only the FIRE optimizer")
+    if calculation.driver == "md" and backend_name != "nvalchemi-mace":
+        raise ValueError(
+            "MD driver is currently supported only by --backend nvalchemi-mace"
+        )
     return backend, calculation
 
 
