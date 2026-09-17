@@ -14,6 +14,71 @@ from matkit.utils.template import copy_template, render_template
 from matkit.utils.unitcell_calculator import calculate_cell_size
 
 
+_SECTION_MARKERS = {
+    "qst": "HEAT OF ADSORPTION",
+    "#molec": "LOADING: # MOLECULES",
+    "mg/g": "LOADING: mg/g",
+    "mol/kg": "LOADING: mol/kg",
+    "g/L": "LOADING: g/L",
+}
+
+
+def _parse_overall(line: str) -> tuple[float, float]:
+    """Return (average, errorbar) from an ``Overall: Average:`` line."""
+    avg_part, _, err_part = line.partition(",")
+    average = float(avg_part.split()[-1])
+    errorbar = float(err_part.split()[-1]) if err_part else 0.0
+    return average, errorbar
+
+
+def _extract_adsorbate_averages(text: str) -> dict[str, tuple[float, float]]:
+    """Extract the adsorbate's absolute ``Overall`` average per section.
+
+    gRASPA prints each averaging section (heat of adsorption and the loading
+    units) as a header followed by one block per component. ``COMPONENT [0]``
+    is the framework itself and must be skipped; the adsorbate is the first
+    non-framework component. Every loading section additionally prints an
+    ``EXCESS LOADING`` sub-block whose ``Overall`` line must not be mistaken
+    for the absolute loading, and the excess ``g/L`` values overflow and are
+    unreliable. Keying on the section header and the adsorbate component (not
+    on fixed line offsets) keeps parsing correct regardless of how many
+    components or blocks a run prints.
+    """
+    section = None
+    in_adsorbate = False
+    in_excess = False
+    found: dict[str, tuple[float, float]] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        matched_section = next(
+            (name for name, marker in _SECTION_MARKERS.items() if marker in line),
+            None,
+        )
+        if matched_section is not None:
+            section = matched_section
+            in_adsorbate = False
+            in_excess = False
+            continue
+        if section is None:
+            continue
+        if line.startswith("COMPONENT ["):
+            # COMPONENT [0] is the framework; the adsorbate is any other index.
+            in_adsorbate = not line.startswith("COMPONENT [0]")
+            in_excess = False
+            continue
+        if "EXCESS LOADING" in line:
+            in_excess = True
+            continue
+        if (
+            in_adsorbate
+            and not in_excess
+            and section not in found
+            and line.startswith("Overall: Average:")
+        ):
+            found[section] = _parse_overall(line)
+    return found
+
+
 def get_output_data(
     output_path: str,
     unit: str = "mol/kg",
@@ -26,7 +91,8 @@ def get_output_data(
         output_path: Path to directory containing simulation output.
         unit: Unit for uptake values ('mol/kg', 'mg/g', or 'g/L').
         output_fname: Name of the output log file.
-        eos: Whether equation of state was used (changes line indices).
+        eos: Accepted for backward compatibility and ignored. Parsing is now
+            section-aware and no longer depends on equation-of-state offsets.
 
     Returns:
         Dict with keys: success, uptake, error, unit, qst, error_qst,
@@ -35,6 +101,9 @@ def get_output_data(
     Raises:
         ValueError: If the output file cannot be parsed or unit is invalid.
     """
+    del eos  # No longer used; retained in the signature for callers.
+    if unit not in ("mol/kg", "mg/g", "g/L"):
+        raise ValueError(f"Unit {unit} is not supported yet.")
     result = {
         "success": False,
         "uptake": None,
@@ -44,67 +113,27 @@ def get_output_data(
         "error_qst": None,
         "qst_unit": "kJ/mol",
     }
-    uptake_lines = []
     try:
-        time_line = None
-        with open(Path(output_path) / output_fname, "r") as rf:
-            for line in rf:
-                if "Overall: Average" in line:
-                    uptake_lines.append(line.strip())
-                if "Work" in line:
-                    time_line = line.strip()
+        text = (Path(output_path) / output_fname).read_text()
 
+        time_line = next(
+            (ln for ln in text.splitlines() if "Work" in ln), None
+        )
         if time_line is None:
             raise ValueError("Could not find timing line in output.")
-        if not uptake_lines:
+
+        averages = _extract_adsorbate_averages(text)
+        if not averages:
             raise ValueError("Could not find uptake lines in output.")
 
-        result_qst = uptake_lines[0].split(",")
-        qst = float(result_qst[0].split()[-1])
-        error_qst = float(result_qst[1].split()[-1])
-        result["qst"] = qst
-        result["error_qst"] = error_qst
+        if "qst" in averages:
+            result["qst"], result["error_qst"] = averages["qst"]
 
-        if not eos:
-            result_mol_kg = uptake_lines[6].split(",")
-            uptake_mol_kg = float(result_mol_kg[0].split()[-1])
-            error_mol_kg = float(result_mol_kg[1].split()[-1])
+        if unit not in averages:
+            raise ValueError(f"Could not find {unit} loading in output.")
+        result["uptake"], result["error"] = averages[unit]
 
-            result_mg_g = uptake_lines[4].split(",")
-            uptake_mg_g = float(result_mg_g[0].split()[-1])
-            error_mg_g = float(result_mg_g[1].split()[-1])
-
-            result_g_L = uptake_lines[7].split(",")
-            uptake_g_L = float(result_g_L[0].split()[-1])
-            error_g_L = float(result_g_L[1].split()[-1])
-
-        else:
-            result_mol_kg = uptake_lines[11].split(",")
-            uptake_mol_kg = float(result_mol_kg[0].split()[-1])
-            error_mol_kg = float(result_mol_kg[1].split()[-1])
-
-            result_mg_g = uptake_lines[5].split(",")
-            uptake_mg_g = float(result_mg_g[0].split()[-1])
-            error_mg_g = float(result_mg_g[1].split()[-1])
-
-            result_g_L = uptake_lines[13].split(",")
-            uptake_g_L = float(result_g_L[0].split()[-1])
-            error_g_L = float(result_g_L[1].split()[-1])
-
-        if unit == "mol/kg":
-            result["uptake"] = uptake_mol_kg
-            result["error"] = error_mol_kg
-        elif unit == "mg/g":
-            result["uptake"] = uptake_mg_g
-            result["error"] = error_mg_g
-        elif unit == "g/L":
-            result["uptake"] = uptake_g_L
-            result["error"] = error_g_L
-        else:
-            raise ValueError(f"Unit {unit} is not supported yet.")
-
-        time = float(time_line.split()[2])
-        result["calc_time_in_s"] = time
+        result["calc_time_in_s"] = float(time_line.split()[2])
         result["success"] = True
         return result
     except Exception as e:
