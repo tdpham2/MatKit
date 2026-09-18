@@ -6,12 +6,116 @@ import shutil
 import pytest
 from pathlib import Path
 
+from matkit.graspa import get_output_data
 from matkit.graspa.graspa import (
     generate_component_blocks,
     setup_batch,
     setup_simulation,
 )
 from matkit.utils.cif import sanitize_cif_stem
+
+
+@pytest.fixture
+def graspa_log(test_data_dir):
+    return (test_data_dir / "graspa" / "single_component.txt").read_text()
+
+
+class TestGetOutputData:
+    """Select absolute adsorbate statistics from sectioned engine output."""
+
+    @pytest.mark.parametrize(
+        "unit,expected", [("mol/kg", 12), ("mg/g", 6), ("g/L", 14)]
+    )
+    @pytest.mark.parametrize("eos", [False, True])
+    def test_absolute_adsorbate_statistics(
+        self, tmp_path, graspa_log, unit, expected, eos
+    ):
+        # The fixture also contains framework and excess averages, including
+        # overflowing excess g/L values that must never be parsed as floats.
+        (tmp_path / "raspa.log").write_text(graspa_log)
+
+        assert get_output_data(str(tmp_path), unit=unit, eos=eos) == {
+            "success": True,
+            "uptake": expected,
+            "error": 0.1,
+            "unit": unit,
+            "qst": 25.0,
+            "error_qst": 0.1,
+            "qst_unit": "kJ/mol",
+            "calc_time_in_s": 2.0,
+        }
+
+    @pytest.mark.parametrize(
+        "unit,expected", [("mol/kg", 12), ("mg/g", 6), ("g/L", 14)]
+    )
+    @pytest.mark.parametrize(
+        "variation", ["extra_blocks", "reordered_sections", "later_component"]
+    )
+    def test_layout_variations(
+        self, tmp_path, graspa_log, unit, expected, variation
+    ):
+        sections = graspa_log.strip().split("\n\n")
+        if variation == "extra_blocks":
+            text = graspa_log.replace(
+                "Overall: Average:",
+                "Block[2]: Average: 999.0\nOverall: Average:",
+            )
+        elif variation == "reordered_sections":
+            text = "\n\n".join(
+                [sections[0], *reversed(sections[1:-1]), sections[-1]]
+            )
+        else:
+            sections[1:-1] = [
+                section
+                + "\nCOMPONENT [2] (N2)\n"
+                + "Overall: Average: 999.0, +/- 99.0"
+                for section in sections[1:-1]
+            ]
+            text = "\n\n".join(sections)
+        (tmp_path / "raspa.log").write_text(text)
+
+        result = get_output_data(str(tmp_path), unit=unit)
+        assert result["uptake"] == expected
+        assert result["error"] == 0.1
+        assert result["qst"] == 25.0
+        assert result["error_qst"] == 0.1
+
+    @pytest.mark.parametrize(
+        "missing,message",
+        [
+            ("timing", "Could not find timing line"),
+            ("loading", "Could not find mol/kg loading"),
+            ("headers", "Could not find uptake lines"),
+        ],
+    )
+    def test_incomplete_output_raises(
+        self, tmp_path, graspa_log, missing, message
+    ):
+        if missing == "timing":
+            text = graspa_log.replace("Work time 2.0", "")
+        elif missing == "loading":
+            text = "\n\n".join(
+                section
+                for section in graspa_log.split("\n\n")
+                if not section.startswith("LOADING: mol/kg")
+            )
+        else:
+            text = "\n".join(
+                line
+                for line in graspa_log.splitlines()
+                if line.startswith(("Overall:", "Work time"))
+            )
+        (tmp_path / "raspa.log").write_text(text)
+
+        with pytest.raises(ValueError, match=message):
+            get_output_data(str(tmp_path))
+
+    def test_unsupported_unit_raises(self, tmp_path, graspa_log):
+        (tmp_path / "raspa.log").write_text(graspa_log)
+        with pytest.raises(
+            ValueError, match="Unit unsupported is not supported"
+        ):
+            get_output_data(str(tmp_path), unit="unsupported")
 
 
 class TestGenerateComponentBlocks:
@@ -167,9 +271,7 @@ class TestSanitizeCifStem:
 class TestSetupBatch:
     """Tests for gRASPA batch setup, focusing on CIF rename mapping."""
 
-    def test_batch_writes_mapping_only_for_renamed(
-        self, sample_cif, tmp_path
-    ):
+    def test_batch_writes_mapping_only_for_renamed(self, sample_cif, tmp_path):
         """cif_mapping.json should list only CIFs that needed renaming."""
         cif_dir = tmp_path / "cifs"
         cif_dir.mkdir()

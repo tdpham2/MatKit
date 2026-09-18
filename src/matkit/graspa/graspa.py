@@ -51,7 +51,11 @@ def _extract_adsorbate_averages(text: str) -> dict[str, tuple[float, float]]:
     for raw in text.splitlines():
         line = raw.strip()
         matched_section = next(
-            (name for name, marker in _SECTION_MARKERS.items() if marker in line),
+            (
+                name
+                for name, marker in _SECTION_MARKERS.items()
+                if marker in line
+            ),
             None,
         )
         if matched_section is not None:
@@ -116,9 +120,7 @@ def get_output_data(
     try:
         text = (Path(output_path) / output_fname).read_text()
 
-        time_line = next(
-            (ln for ln in text.splitlines() if "Work" in ln), None
-        )
+        time_line = next((ln for ln in text.splitlines() if "Work" in ln), None)
         if time_line is None:
             raise ValueError("Could not find timing line in output.")
 
