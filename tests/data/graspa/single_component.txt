@@ -1,0 +1,60 @@
+# Synthetic gRASPA output for parser tests (MIT).
+# Values are intentionally distinct, not physically consistent.
+
+HEAT OF ADSORPTION
+COMPONENT [1] (CO2)
+Block[0]: Average: 24.0
+Block[1]: Average: 26.0
+Overall: Average: 25.0, +/- 0.1
+
+LOADING: # MOLECULES
+COMPONENT [0] (framework)
+Block[0]: Average: 512.0
+Block[1]: Average: 512.0
+Overall: Average: 512.0, +/- 0.0
+EXCESS LOADING
+Overall: Average: 511.0, +/- 0.0
+COMPONENT [1] (CO2)
+Block[0]: Average: 7.0
+Block[1]: Average: 9.0
+Overall: Average: 8.0, +/- 0.1
+EXCESS LOADING
+Overall: Average: 7.0, +/- 0.2
+
+LOADING: mg/g
+COMPONENT [0] (framework)
+Block[0]: Average: 1000.0
+Block[1]: Average: 1000.0
+Overall: Average: 1000.0, +/- 0.0
+EXCESS LOADING
+Overall: Average: 999.0, +/- 0.0
+COMPONENT [1] (CO2)
+Block[0]: Average: 5.0
+Block[1]: Average: 7.0
+Overall: Average: 6.0, +/- 0.1
+EXCESS LOADING
+Overall: Average: 4.0, +/- 0.2
+
+LOADING: mol/kg
+COMPONENT [0] (framework)
+Block[0]: Average: 2000.0
+Block[1]: Average: 2000.0
+Overall: Average: 2000.0, +/- 0.0
+EXCESS LOADING
+Overall: Average: 1999.0, +/- 0.0
+COMPONENT [1] (CO2)
+Block[0]: Average: 11.0
+Block[1]: Average: 13.0
+Overall: Average: 12.0, +/- 0.1
+EXCESS LOADING
+Overall: Average: 10.0, +/- 0.2
+
+LOADING: g/L
+COMPONENT [1] (CO2)
+Block[0]: Average: 13.0
+Block[1]: Average: 15.0
+Overall: Average: 14.0, +/- 0.1
+EXCESS LOADING
+Overall: Average: ********, +/- ********
+
+Work time 2.0

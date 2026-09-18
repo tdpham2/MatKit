@@ -316,14 +316,9 @@ def test_subprocess_execution_and_timeout(sample_cif, tmp_path):
 
 
 @pytest.mark.parametrize(
-    "unit,fugacity,expected",
-    [
-        ("mol/kg", "PR-EOS", 12),
-        ("mg/g", "PR-EOS", 6),
-        ("g/L", "PR-EOS", 14),
-        ("mol/kg", 1.0, 7),
-    ],
+    "unit,expected", [("mol/kg", 12), ("mg/g", 6), ("g/L", 14)]
 )
+@pytest.mark.parametrize("fugacity", ["PR-EOS", 1.0])
 def test_single_component_adsorption_requires_charges_and_collects(
     sample_cif, tmp_path, unit, fugacity, expected
 ):
@@ -360,6 +355,10 @@ def test_single_component_adsorption_requires_charges_and_collects(
     )
     assert result.accepted
     assert result.payload.uptake == expected
+    assert result.payload.unit == unit
+    assert result.payload.uncertainty == 0.1
+    assert result.payload.heat_of_adsorption == 25
+    assert result.payload.heat_uncertainty == 0.1
     assert result.payload.component == "CO2"
     assert result.checks[0].status == "unknown"
     assert (

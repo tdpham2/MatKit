@@ -22,9 +22,12 @@ if mode == "zeopp":
                 (fixtures / f"test_structure.{analysis}").read_bytes()
             )
 elif mode == "graspa":
-    for i in range(14):
-        print(f"Overall: Average: {25 if i == 0 else i + 1}, +/- 0.1")
-    if "--partial" not in sys.argv:
-        print("Work time 2.0")
+    fixture = (
+        Path(__file__).parents[1] / "data" / "graspa" / "single_component.txt"
+    )
+    for line in fixture.read_text().splitlines():
+        if "--partial" in sys.argv and line.startswith("Work time"):
+            continue
+        print(line)
 else:
     raise SystemExit("unknown fixture engine")
