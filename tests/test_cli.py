@@ -1,6 +1,7 @@
 """Tests for matkit CLI."""
 
 import json
+import importlib
 import importlib.util
 from pathlib import Path
 import sys
@@ -388,3 +389,229 @@ def test_gpu_example_unconverged_exit(gpu_example, monkeypatch, capsys):
     output = capsys.readouterr()
     assert json.loads(output.out)["unconverged"] == 1
     assert "unconverged" in output.err
+
+
+LEGACY_FAILURES = [
+    (
+        "matkit.graspa",
+        "setup_simulation",
+        [
+            "graspa",
+            "setup",
+            "--cif",
+            "{cif}",
+            "--outdir",
+            "{out}",
+            "--adsorbate",
+            "CO2",
+        ],
+    ),
+    (
+        "matkit.graspa",
+        "setup_batch",
+        [
+            "graspa",
+            "batch-setup",
+            "--cif-dir",
+            "{dir}",
+            "--outdir",
+            "{out}",
+            "--adsorbate",
+            "CO2",
+            "--temp",
+            "298",
+            "--pressure",
+            "1e5",
+        ],
+    ),
+    (
+        "matkit.graspa",
+        "get_output_data",
+        ["graspa", "analyze", "--path", "{dir}"],
+    ),
+    (
+        "matkit.graspa_sycl",
+        "setup_simulation",
+        ["graspa_sycl", "setup", "--cif", "{cif}", "--outdir", "{out}"],
+    ),
+    (
+        "matkit.graspa_sycl",
+        "get_output_data",
+        ["graspa_sycl", "analyze", "--path", "{dir}"],
+    ),
+    (
+        "matkit.pygraspa",
+        "setup_simulation",
+        [
+            "pygraspa",
+            "setup",
+            "--cif",
+            "{cif}",
+            "--outdir",
+            "{out}",
+            "--adsorbate",
+            "CO2",
+            "--model",
+            "m",
+            "--ecomps",
+            "0.0",
+        ],
+    ),
+    (
+        "matkit.pygraspa",
+        "setup_batch",
+        [
+            "pygraspa",
+            "batch-setup",
+            "--cif-dir",
+            "{dir}",
+            "--outdir",
+            "{out}",
+            "--adsorbate",
+            "CO2",
+            "--model",
+            "m",
+            "--ecomps",
+            "0.0",
+            "--temp",
+            "298",
+            "--pressure",
+            "1e5",
+        ],
+    ),
+    (
+        "matkit.pygraspa",
+        "compute_ecomp",
+        ["pygraspa", "compute-ecomp", "--def-file", "{cif}", "--model", "m"],
+    ),
+    (
+        "matkit.pygraspa",
+        "get_output_data",
+        ["pygraspa", "analyze", "--path", "{dir}"],
+    ),
+    (
+        "matkit.raspa2",
+        "setup_input_simulation",
+        ["raspa2", "setup", "--cif", "{cif}", "--outdir", "{out}"],
+    ),
+    (
+        "matkit.raspa2",
+        "get_output_data",
+        ["raspa2", "analyze", "--path", "{cif}"],
+    ),
+    (
+        "matkit.tobacco",
+        "create_linker",
+        ["tobacco", "create", "--smiles", "C", "--site", "C1"],
+    ),
+    (
+        "matkit.plot.parsers",
+        "collect_data_files",
+        ["plot", "isotherm", "--data", "{cif}"],
+    ),
+    (
+        "matkit.plot.isotherm",
+        "plot_selectivity",
+        ["plot", "selectivity", "--data", "{cif}"],
+    ),
+    ("matkit.mlip", "run_opt_mace", ["mlip", "mace-opt", "--fname", "{cif}"]),
+    ("matkit.mlip.uma", "run_opt_uma", ["mlip", "uma-opt", "--fname", "{cif}"]),
+    ("matkit.mlip.uma", "run_sp_uma", ["mlip", "uma-sp", "--fname", "{cif}"]),
+    ("matkit.mlip.uma", "run_md_uma", ["mlip", "uma-md", "--fname", "{cif}"]),
+    (
+        "matkit.mlip.uma",
+        "run_opt_uma_batch",
+        ["mlip", "uma-opt-batch", "--input", "{cif}", "--outdir", "{out}"],
+    ),
+    (
+        "matkit.pacmof2",
+        "run_charge_prediction",
+        ["pacmof2", "predict", "--cif", "{cif}", "--outdir", "{out}"],
+    ),
+    ("matkit.zeopp", "run_zeopp", ["zeopp", "run", "--cif", "{cif}"]),
+    (
+        "matkit.zeopp",
+        "get_output_data",
+        ["zeopp", "analyze", "--path", "{dir}"],
+    ),
+    (
+        "matkit.zeopp",
+        "run_batch",
+        ["zeopp", "run-batch", "--cif-dir", "{dir}", "--outdir", "{out}"],
+    ),
+]
+
+
+def _legacy_args(template, sample_cif, tmp_path):
+    values = {
+        "cif": sample_cif,
+        "dir": str(Path(sample_cif).parent),
+        "out": str(tmp_path / "out"),
+    }
+    return [arg.format(**values) for arg in template]
+
+
+@pytest.mark.parametrize(
+    "module,attr,template",
+    LEGACY_FAILURES,
+    ids=[" ".join(case[2][:2]) for case in LEGACY_FAILURES],
+)
+@pytest.mark.parametrize("error", [RuntimeError, ImportError])
+def test_legacy_command_failure_exits_nonzero(
+    module, attr, template, error, sample_cif, tmp_path, monkeypatch
+):
+    def fail(*args, **kwargs):
+        raise error("boom")
+
+    monkeypatch.setattr(
+        importlib.import_module(module), attr, fail, raising=False
+    )
+    result = CliRunner().invoke(
+        main, _legacy_args(template, sample_cif, tmp_path)
+    )
+    assert result.exit_code == 1, result.output
+    assert "Error:" in result.stderr
+    if error is RuntimeError:
+        assert "boom" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "module,attr,template",
+    [case for case in LEGACY_FAILURES if case[2][1] in ("analyze", "run")],
+    ids=lambda case: case if isinstance(case, str) else None,
+)
+def test_legacy_failed_result_exits_nonzero(
+    module, attr, template, sample_cif, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        importlib.import_module(module),
+        attr,
+        lambda *a, **kw: {"success": False, "error": "no outputs"},
+    )
+    result = CliRunner().invoke(
+        main, _legacy_args(template, sample_cif, tmp_path)
+    )
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["success"] is False
+    assert "no outputs" in result.stderr
+
+
+def test_legacy_successful_result_exits_zero(sample_cif, monkeypatch):
+    import matkit.zeopp
+
+    monkeypatch.setattr(
+        matkit.zeopp, "run_zeopp", lambda **kw: {"success": True}
+    )
+    result = CliRunner().invoke(main, ["zeopp", "run", "--cif", sample_cif])
+    assert result.exit_code == 0
+    assert result.stderr == ""
+
+
+@pytest.mark.parametrize(
+    "flags", [[], ["--cif", "{cif}", "--cif-dir", "{dir}"]]
+)
+def test_pacmof2_input_usage_errors(flags, sample_cif, tmp_path):
+    args = ["pacmof2", "predict", "--outdir", "{out}", *flags]
+    result = CliRunner().invoke(main, _legacy_args(args, sample_cif, tmp_path))
+    assert result.exit_code == 2
+    assert "--cif" in result.stderr
