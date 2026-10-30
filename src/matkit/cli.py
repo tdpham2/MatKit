@@ -29,6 +29,13 @@ def main(verbose):
 register_commands(main)
 
 
+def _echo_result(result):
+    """Print a legacy result dict; exit nonzero if it reports failure."""
+    click.echo(json.dumps(result, indent=2))
+    if result.get("success") is False:
+        raise click.ClickException(result.get("error") or "no valid results")
+
+
 # ==========================================
 # GRASPA COMMANDS
 # ==========================================
@@ -80,7 +87,7 @@ def graspa_setup(cif, outdir, adsorbate, temp, pressure, cutoff, cycles):
         )
         click.echo(f"Successfully set up gRASPA simulation in {outdir}")
     except Exception as e:
-        click.echo(f"Error setting up gRASPA simulation: {e}", err=True)
+        raise click.ClickException(f"gRASPA setup failed: {e}") from e
 
 
 @graspa_cli.command("batch-setup")
@@ -146,7 +153,7 @@ def graspa_batch_setup(
         click.echo(f"Set up {len(manifest)} simulations in {outdir}")
         click.echo(f"Manifest written to {outdir}/simulations.jsonl")
     except Exception as e:
-        click.echo(f"Error setting up batch simulations: {e}", err=True)
+        raise click.ClickException(f"Batch setup failed: {e}") from e
 
 
 @graspa_cli.command("analyze")
@@ -168,9 +175,9 @@ def graspa_analyze(path, unit):
 
     try:
         result = get_output_data(path, unit=unit)
-        click.echo(json.dumps(result, indent=2))
+        _echo_result(result)
     except Exception as e:
-        click.echo(f"Error analyzing gRASPA results: {e}", err=True)
+        raise click.ClickException(f"gRASPA analysis failed: {e}") from e
 
 
 # ==========================================
@@ -216,7 +223,7 @@ def graspa_sycl_setup(cif, outdir, adsorbate, temp, pressure, cutoff, cycles):
         )
         click.echo(f"Successfully set up gRASPA SYCL simulation in {outdir}")
     except Exception as e:
-        click.echo(f"Error setting up gRASPA SYCL simulation: {e}", err=True)
+        raise click.ClickException(f"gRASPA SYCL setup failed: {e}") from e
 
 
 @graspa_sycl_cli.command("analyze")
@@ -246,9 +253,9 @@ def graspa_sycl_analyze(path, unit, adsorbate, fname):
         result = get_output_data(
             output_path=path, unit=unit, adsorbate=adsorbate, output_fname=fname
         )
-        click.echo(json.dumps(result, indent=2))
+        _echo_result(result)
     except Exception as e:
-        click.echo(f"Error analyzing gRASPA SYCL results: {e}", err=True)
+        raise click.ClickException(f"gRASPA SYCL analysis failed: {e}") from e
 
 
 # ==========================================
@@ -386,7 +393,7 @@ def pygraspa_setup(
         )
         click.echo(f"Successfully set up pygRASPA simulation in {outdir}")
     except Exception as e:
-        click.echo(f"Error setting up pygRASPA simulation: {e}", err=True)
+        raise click.ClickException(f"pygRASPA setup failed: {e}") from e
 
 
 @pygraspa_cli.command("batch-setup")
@@ -516,7 +523,7 @@ def pygraspa_batch_setup(
         click.echo(f"Set up {len(manifest)} simulations in {outdir}")
         click.echo(f"Manifest written to {outdir}/simulations.jsonl")
     except Exception as e:
-        click.echo(f"Error setting up batch simulations: {e}", err=True)
+        raise click.ClickException(f"Batch setup failed: {e}") from e
 
 
 @pygraspa_cli.command("compute-ecomp")
@@ -587,7 +594,7 @@ def pygraspa_compute_ecomp(
             )
         )
     except Exception as e:
-        click.echo(f"Error computing E_comp: {e}", err=True)
+        raise click.ClickException(f"E_comp computation failed: {e}") from e
 
 
 @pygraspa_cli.command("analyze")
@@ -621,9 +628,9 @@ def pygraspa_analyze(path, unit, fname, skip_cycles):
             output_fname=fname,
             n_skip_cycles=skip_cycles,
         )
-        click.echo(json.dumps(result, indent=2))
+        _echo_result(result)
     except Exception as e:
-        click.echo(f"Error analyzing pygRASPA results: {e}", err=True)
+        raise click.ClickException(f"pygRASPA analysis failed: {e}") from e
 
 
 # ==========================================
@@ -670,7 +677,7 @@ def raspa2_setup(cif, outdir, adsorbate, temp, pressure, cutoff, cycles):
         )
         click.echo(f"Successfully set up RASPA2 simulation in {outdir}")
     except Exception as e:
-        click.echo(f"Error setting up RASPA2 simulation: {e}", err=True)
+        raise click.ClickException(f"RASPA2 setup failed: {e}") from e
 
 
 @raspa2_cli.command("analyze")
@@ -692,9 +699,9 @@ def raspa2_analyze(path, unit):
 
     try:
         result = get_output_data(path, unit=unit)
-        click.echo(json.dumps(result, indent=2))
+        _echo_result(result)
     except Exception as e:
-        click.echo(f"Error analyzing RASPA2 results: {e}", err=True)
+        raise click.ClickException(f"RASPA2 analysis failed: {e}") from e
 
 
 # ==========================================
@@ -724,7 +731,7 @@ def tobacco_create(smiles, site, out):
             smiles=smiles, connection_sites=list(site), output_cif=out
         )
     except Exception as e:
-        click.echo(f"Error creating linker: {e}", err=True)
+        raise click.ClickException(f"Linker creation failed: {e}") from e
 
 
 # ==========================================
@@ -884,14 +891,13 @@ def plot_isotherm_cmd(
 
         click.echo(f"Plot saved to {out}")
 
-    except ImportError:
-        click.echo(
-            "Error: matplotlib is required for plotting. "
-            "Install with: pip install matkit[plot]",
-            err=True,
-        )
+    except ImportError as e:
+        raise click.ClickException(
+            "matplotlib is required for plotting. "
+            "Install with: pip install matkit[plot]"
+        ) from e
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        raise click.ClickException(str(e)) from e
 
 
 @plot_cli.command("selectivity")
@@ -998,14 +1004,13 @@ def plot_selectivity_cmd(
         )
         click.echo(f"Plot saved to {out}")
 
-    except ImportError:
-        click.echo(
-            "Error: matplotlib is required for plotting. "
-            "Install with: pip install matkit[plot]",
-            err=True,
-        )
+    except ImportError as e:
+        raise click.ClickException(
+            "matplotlib is required for plotting. "
+            "Install with: pip install matkit[plot]"
+        ) from e
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        raise click.ClickException(str(e)) from e
 
 
 # ==========================================
@@ -1516,14 +1521,12 @@ def mace_opt_cmd(
             output_fname=output,
         )
         click.echo("MACE-MP optimization complete.")
-    except ImportError:
-        click.echo(
-            "Error: mace-torch required. "
-            "Install with: pip install matkit[mlip]",
-            err=True,
-        )
+    except ImportError as e:
+        raise click.ClickException(
+            "mace-torch required. Install with: pip install matkit[mlip]"
+        ) from e
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        raise click.ClickException(str(e)) from e
 
 
 @mlip_cli.command("uma-opt")
@@ -1600,14 +1603,12 @@ def uma_opt_cmd(
             output_fname=output,
         )
         click.echo("UMA optimization complete.")
-    except ImportError:
-        click.echo(
-            "Error: fairchem-core required. "
-            "Install with: pip install matkit[uma]",
-            err=True,
-        )
+    except ImportError as e:
+        raise click.ClickException(
+            "fairchem-core required. Install with: pip install matkit[uma]"
+        ) from e
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        raise click.ClickException(str(e)) from e
 
 
 @mlip_cli.command("uma-sp")
@@ -1645,15 +1646,13 @@ def uma_sp_cmd(fname, model, task_name, device):
             task_name=task_name,
             device=device,
         )
-        click.echo(json.dumps(result, indent=2))
-    except ImportError:
-        click.echo(
-            "Error: fairchem-core required. "
-            "Install with: pip install matkit[uma]",
-            err=True,
-        )
+        _echo_result(result)
+    except ImportError as e:
+        raise click.ClickException(
+            "fairchem-core required. Install with: pip install matkit[uma]"
+        ) from e
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        raise click.ClickException(str(e)) from e
 
 
 @mlip_cli.command("uma-md")
@@ -1751,14 +1750,12 @@ def uma_md_cmd(
             log_interval=log_interval,
         )
         click.echo("UMA MD complete.")
-    except ImportError:
-        click.echo(
-            "Error: fairchem-core required. "
-            "Install with: pip install matkit[uma]",
-            err=True,
-        )
+    except ImportError as e:
+        raise click.ClickException(
+            "fairchem-core required. Install with: pip install matkit[uma]"
+        ) from e
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        raise click.ClickException(str(e)) from e
 
 
 @mlip_cli.command("uma-opt-batch")
@@ -1863,14 +1860,12 @@ def uma_opt_batch_cmd(
             overwrite=overwrite,
         )
         click.echo(f"Results written to: {result_path}")
-    except ImportError:
-        click.echo(
-            "Error: fairchem-core required. "
-            "Install with: pip install matkit[uma]",
-            err=True,
-        )
+    except ImportError as e:
+        raise click.ClickException(
+            "fairchem-core required. Install with: pip install matkit[uma]"
+        ) from e
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        raise click.ClickException(str(e)) from e
 
 
 # ==========================================
@@ -1939,14 +1934,9 @@ def pacmof2_predict(
           --net-charge charges.json
     """
     if cif and cif_dir:
-        click.echo(
-            "Error: specify --cif or --cif-dir, not both.",
-            err=True,
-        )
-        return
+        raise click.UsageError("specify --cif or --cif-dir, not both.")
     if not cif and not cif_dir:
-        click.echo("Error: provide --cif or --cif-dir.", err=True)
-        return
+        raise click.UsageError("provide --cif or --cif-dir.")
 
     cif_path = cif_dir if cif_dir else cif
 
@@ -1973,14 +1963,12 @@ def pacmof2_predict(
             f"Predicted charges for {result['num_structures']} "
             f"structure(s). Output: {result['output_dir']}"
         )
-    except ImportError:
-        click.echo(
-            "Error: pacmof2 is required. "
-            "Install with: pip install matkit[pacmof2]",
-            err=True,
-        )
+    except ImportError as e:
+        raise click.ClickException(
+            "pacmof2 is required. Install with: pip install matkit[pacmof2]"
+        ) from e
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        raise click.ClickException(str(e)) from e
 
 
 # ==========================================
@@ -2070,9 +2058,9 @@ def zeopp_run(
             network_path=network_path,
             output_dir=outdir,
         )
-        click.echo(json.dumps(result, indent=2))
+        _echo_result(result)
     except Exception as e:
-        click.echo(f"Error running Zeo++: {e}", err=True)
+        raise click.ClickException(f"Zeo++ run failed: {e}") from e
 
 
 @zeopp_cli.command("analyze")
@@ -2095,9 +2083,9 @@ def zeopp_analyze(path, analysis):
     try:
         analyses = list(analysis) if analysis else None
         result = get_output_data(path, analyses=analyses)
-        click.echo(json.dumps(result, indent=2))
+        _echo_result(result)
     except Exception as e:
-        click.echo(f"Error analyzing Zeo++ results: {e}", err=True)
+        raise click.ClickException(f"Zeo++ analysis failed: {e}") from e
 
 
 @zeopp_cli.command("run-batch")
@@ -2198,7 +2186,7 @@ def zeopp_run_batch(
         )
         click.echo(f"Results written to {summary}")
     except Exception as e:
-        click.echo(f"Error in batch run: {e}", err=True)
+        raise click.ClickException(f"Zeo++ batch run failed: {e}") from e
 
 
 if __name__ == "__main__":
