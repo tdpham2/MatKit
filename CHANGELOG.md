@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- gRASPA movie reader and validated final/all/selected snapshot-to-CIF export
+  through `export_adsorption_snapshots` and `matkit adsorption export-snapshots`,
+  including virtual-site handling, triclinic framework validation, provenance,
+  and geometry-only sidecars for native MLIP handoffs
 - Experimental unified scientific API, versioned requests/results, structure
   lineage, relocatable run bundles, and supervised local execution
 - Shared operation CLI and optional bounded stdio MCP tools with artifact

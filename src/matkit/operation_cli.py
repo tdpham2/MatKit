@@ -135,6 +135,43 @@ def register_commands(main):
 
         invoke(analyze_adsorption, bundle)
 
+    @adsorption.command("export-snapshots")
+    @click.argument(
+        "bundle", type=click.Path(exists=True, file_okay=False, path_type=Path)
+    )
+    @click.option("--outdir", required=True, type=click.Path(path_type=Path))
+    @click.option(
+        "--frames",
+        default="final",
+        show_default=True,
+        help="final, all, or comma-separated zero-based production indices.",
+    )
+    @click.option(
+        "--type-map",
+        type=click.Path(exists=True, dir_okay=False, path_type=Path),
+        help="JSON object mapping pseudo-atom names to elements/null.",
+    )
+    @click.option("--check", is_flag=True, help="Validate without writing.")
+    def export_snapshots(bundle, outdir, frames, type_map, check):
+        from matkit.api import export_adsorption_snapshots
+
+        selection = frames
+        if frames not in {"final", "all"}:
+            try:
+                selection = [int(value) for value in frames.split(",")]
+            except ValueError as exc:
+                raise click.UsageError(
+                    "--frames requires final, all, or comma-separated indices"
+                ) from exc
+        invoke(
+            export_adsorption_snapshots,
+            bundle,
+            output_dir=outdir,
+            frames=selection,
+            type_map=read_json(type_map) if type_map else None,
+            check_only=check,
+        )
+
     @main.command("prepare")
     @click.option(
         "--spec",
