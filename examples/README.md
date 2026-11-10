@@ -10,7 +10,7 @@ checkpoint writers, or charge-generation helpers.
 | [zeopp.py](zeopp.py) | Pore analyses; multiple structures | `analyze_pores`, `run_batch` |
 | [graspa.py](graspa.py) | Pure-component preparation, execution, pressure sweep | `prepare_adsorption`, `run_adsorption` |
 | [graspa_mixture_setup.py](graspa_mixture_setup.py) | CO2/N2 mixture preparation | `matkit.graspa.setup_simulation` |
-| [mlip.py](mlip.py) | Energy/forces, fixed-cell relaxation, batches; three backends | `evaluate`, `relax`, `run_batch` |
+| [mlip.py](mlip.py) | Energy/forces, fixed-cell relaxation, batches; four backends | `evaluate`, `relax`, `run_batch` |
 
 ## Install and supply inputs
 
@@ -21,6 +21,7 @@ environment:
 python -m pip install -e .                 # Core, Zeo++, gRASPA preparation/CLI
 python -m pip install -e '.[mlip]'          # Direct MACE, when needed
 python -m pip install -e '.[rootstock]'     # Rootstock client, when needed
+python -m pip install -e '.[mace_polar]'    # MACE-Polar; not with nvalchemi_mace
 matkit capabilities --json
 ```
 
@@ -293,6 +294,10 @@ python examples/mlip.py framework.cif --backend ase-mace --checkpoint medium \
 python examples/mlip.py framework.cif --backend rootstock \
   --cluster polaris --checkpoint mace-mp-0-medium \
   --execution cuda-execution.json --outdir runs/rootstock-energy
+
+python examples/mlip.py molecule.xyz --backend mace-polar \
+  --checkpoint polar-1-m --charge -1 --spin 2 \
+  --execution cuda-execution.json --outdir runs/polar-energy
 
 python examples/mlip.py geometry_a.extxyz geometry_b.extxyz \
   --backend nvalchemi-mace --checkpoint medium --batch-size 16 \

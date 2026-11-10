@@ -18,6 +18,7 @@ from .models import (
     EvaluationPayload,
     EvaluateRequest,
     MACEAdapter,
+    MACEPolarAdapter,
     PorePayload,
     PoreRequest,
     RelaxRequest,
@@ -29,6 +30,7 @@ from .structures import final_structure, load_structure, sha256
 def backend_config(request, execution):
     from matkit.mlip.config import (
         ASEMACEConfig,
+        MACEPolarConfig,
         NVAlchemiMACEConfig,
         RootstockConfig,
     )
@@ -43,6 +45,15 @@ def backend_config(request, execution):
             **method.model_dump(),
             device=device,
             dtype=adapter.dtype or "float64",
+        )
+    if isinstance(adapter, MACEPolarAdapter):
+        return MACEPolarConfig(
+            checkpoint=method.checkpoint,
+            device=device,
+            dtype=adapter.dtype or "float64",
+            pbc_handling=adapter.pbc_handling,
+            charge=adapter.charge,
+            spin=adapter.spin,
         )
     if isinstance(adapter, AlchemiAdapter):
         return NVAlchemiMACEConfig(

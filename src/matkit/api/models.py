@@ -124,6 +124,14 @@ class MACEAdapter(Model):
     dtype: Literal["float32", "float64"] | None = None
 
 
+class MACEPolarAdapter(Model):
+    type: Literal["mace-polar"] = "mace-polar"
+    dtype: Literal["float32", "float64"] | None = None
+    charge: StrictInt = 0
+    spin: Count = 1
+    pbc_handling: Literal["auto", "pbc", "realspace", "slab"] = "auto"
+
+
 class RootstockAdapter(Model):
     type: Literal["rootstock"] = "rootstock"
     cluster: str | None = None
@@ -151,7 +159,7 @@ class AlchemiAdapter(Model):
 
 
 CalculatorAdapter = Annotated[
-    Union[MACEAdapter, RootstockAdapter, AlchemiAdapter],
+    Union[MACEAdapter, MACEPolarAdapter, RootstockAdapter, AlchemiAdapter],
     Field(discriminator="type"),
 ]
 

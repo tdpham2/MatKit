@@ -1028,13 +1028,18 @@ def _mlip_options(function):
         click.option(
             "--backend",
             required=True,
-            type=click.Choice(["ase-mace", "rootstock", "nvalchemi-mace"]),
+            type=click.Choice(
+                ["ase-mace", "mace-polar", "rootstock", "nvalchemi-mace"]
+            ),
             help="MLIP execution backend.",
         ),
         click.option(
             "--checkpoint",
             required=True,
-            help="Model alias, canonical Rootstock ID, or checkpoint path.",
+            help=(
+                "Model alias (e.g. medium, polar-1-m), canonical Rootstock "
+                "ID, or checkpoint path."
+            ),
         ),
         click.option(
             "--device", default=None, help="Device such as cpu or cuda."
@@ -1070,6 +1075,27 @@ def _mlip_options(function):
             "--dispersion/--no-dispersion",
             default=False,
             help="Enable MACE-MP D3 dispersion.",
+        ),
+        click.option(
+            "--charge",
+            default=0,
+            show_default=True,
+            type=int,
+            help="Total charge applied to every structure (MACE-Polar).",
+        ),
+        click.option(
+            "--spin",
+            default=1,
+            show_default=True,
+            type=int,
+            help="Spin multiplicity applied to every structure (MACE-Polar).",
+        ),
+        click.option(
+            "--pbc-handling",
+            default="auto",
+            show_default=True,
+            type=click.Choice(["auto", "pbc", "realspace", "slab"]),
+            help="MACE-Polar electrostatics boundary treatment.",
         ),
         click.option("--cluster", default=None, help="Rootstock cluster ID."),
         click.option(
@@ -1184,6 +1210,7 @@ def _parse_setup_kwargs(values):
 def _build_mlip_configs(options):
     from matkit.mlip import (
         ASEMACEConfig,
+        MACEPolarConfig,
         MLIPCalculationConfig,
         NVAlchemiMACEConfig,
         RootstockConfig,
@@ -1218,6 +1245,15 @@ def _build_mlip_configs(options):
             dtype=dtype or "float64",
             calculator_type=options["calculator_type"],
             dispersion=options["dispersion"],
+        )
+    elif backend_name == "mace-polar":
+        backend = MACEPolarConfig(
+            checkpoint=checkpoint,
+            device=device or "cpu",
+            dtype=dtype or "float64",
+            pbc_handling=options["pbc_handling"],
+            charge=options["charge"],
+            spin=options["spin"],
         )
     elif backend_name == "rootstock":
         backend = RootstockConfig(

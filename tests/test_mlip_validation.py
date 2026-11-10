@@ -18,6 +18,7 @@ from ase.io import write
 
 from matkit.mlip import (
     ASEMACEConfig,
+    MACEPolarConfig,
     MLIPCalculationConfig,
     NVAlchemiMACEConfig,
     RootstockConfig,
@@ -101,6 +102,23 @@ def test_md_driver_requires_nvalchemi_backend(copper, tmp_path):
             MLIPCalculationConfig(driver="md"),
             output_dir=tmp_path / "md",
         )
+
+
+@pytest.mark.parametrize(
+    "kwargs,message",
+    [
+        ({"checkpoint": ""}, "checkpoint"),
+        ({"dtype": "float16"}, "dtype"),
+        ({"pbc_handling": "ewald"}, "pbc_handling"),
+        ({"charge": True}, "charge"),
+        ({"charge": 1.5}, "charge"),
+        ({"spin": 0}, "spin"),
+        ({"spin": 1.0}, "spin"),
+    ],
+)
+def test_mace_polar_config_validated(kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        MACEPolarConfig(**kwargs)
 
 
 def test_rootstock_kwargs_must_be_serializable():

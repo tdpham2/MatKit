@@ -17,6 +17,7 @@ from ase.io import read as ase_read
 
 from matkit.mlip.config import (
     ASEMACEConfig,
+    MACEPolarConfig,
     MLIPBackendConfig,
     MLIPCalculationConfig,
     NVAlchemiMACEConfig,
@@ -27,6 +28,8 @@ from matkit.types import MLIPBatchSummary, MLIPResult
 
 logger = logging.getLogger(__name__)
 _ResultCallback = Callable[[int, dict[str, Any]], None]
+# Backends whose calculator runs in this process and may own the GPU.
+_DIRECT_ASE = (ASEMACEConfig, MACEPolarConfig)
 
 
 def _finite_array(name: str, value, shape: tuple[int, ...]) -> np.ndarray:
@@ -123,13 +126,40 @@ def _create_mace_calculator(config: ASEMACEConfig):
     return factory(**kwargs)
 
 
+def _create_mace_polar_calculator(config: MACEPolarConfig):
+    try:
+        import mace.calculators as mace_calculators
+    except ImportError as exc:
+        raise ImportError(
+            "MACE-Polar requires the 'mace_polar' extra: "
+            "pip install matkit[mace_polar]"
+        ) from exc
+
+    try:
+        factory = getattr(mace_calculators, "mace_polar")
+    except AttributeError as exc:
+        raise ImportError(
+            "Installed mace-torch does not provide mace_polar; "
+            "MACE-Polar requires mace-torch>=0.3.16."
+        ) from exc
+    return factory(
+        model=config.checkpoint,
+        device=config.device,
+        default_dtype=config.dtype,
+        pbc_handling=config.pbc_handling,
+    )
+
+
 @contextmanager
 def _ase_backend_context(
-    config: ASEMACEConfig | RootstockConfig,
+    config: ASEMACEConfig | MACEPolarConfig | RootstockConfig,
 ) -> Iterator[Any]:
     """Create one ASE calculator and retain it for the whole request."""
     if isinstance(config, ASEMACEConfig):
         yield _create_mace_calculator(config)
+        return
+    if isinstance(config, MACEPolarConfig):
+        yield _create_mace_polar_calculator(config)
         return
 
     try:
@@ -250,13 +280,17 @@ def _run_ase_item(
     input_file: str,
     atoms,
     calculator,
-    backend: ASEMACEConfig | RootstockConfig,
+    backend: ASEMACEConfig | MACEPolarConfig | RootstockConfig,
     calculation: MLIPCalculationConfig,
     requested_properties: Sequence[str] | None = None,
 ) -> dict[str, Any]:
+    if isinstance(backend, MACEPolarConfig):
+        # Backend settings override any charge/spin read from the file.
+        atoms.info["charge"] = backend.charge
+        atoms.info["spin"] = backend.spin
     atoms.calc = calculator
     # Rootstock's synchronous worker owns the GPU and its dependencies.
-    if isinstance(backend, ASEMACEConfig):
+    if isinstance(backend, _DIRECT_ASE):
         _synchronize_device(backend.device)
     started = time.perf_counter()
     converged = True
@@ -280,7 +314,7 @@ def _run_ase_item(
     )
     forces = atoms.get_forces() if "forces" in properties else None
     stress = _optional_stress(atoms) if "stress" in properties else None
-    if isinstance(backend, ASEMACEConfig):
+    if isinstance(backend, _DIRECT_ASE):
         _synchronize_device(backend.device)
     elapsed = time.perf_counter() - started
     return _success_result(
@@ -622,13 +656,13 @@ def _execute_inputs(
             on_result(index, result)
 
     setup_started = time.perf_counter()
-    if isinstance(backend, (ASEMACEConfig, RootstockConfig)):
+    if isinstance(backend, (*_DIRECT_ASE, RootstockConfig)):
         # Only startup failures apply to every prepared item. Body/teardown
         # errors must not replace already committed results.
         with ExitStack() as stack:
             try:
                 calculator = stack.enter_context(_ase_backend_context(backend))
-                if isinstance(backend, ASEMACEConfig):
+                if isinstance(backend, _DIRECT_ASE):
                     _synchronize_device(backend.device)
             except Exception as exc:
                 setup_time = time.perf_counter() - setup_started

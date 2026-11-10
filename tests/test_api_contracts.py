@@ -12,6 +12,8 @@ from ase.io import write
 from matkit.api import (
     AlchemiAdapter,
     EvaluateRequest,
+    ExecutionConfig,
+    MACEPolarAdapter,
     MLIPMethod,
     PoreRequest,
     RelaxRequest,
@@ -87,14 +89,69 @@ def test_discovery_does_not_import_optional_engines(monkeypatch):
             "mace",
             "rootstock",
             "nvalchemi",
+            "graph_longrange",
             "mcp",
         }:
             raise AssertionError(f"Discovery imported {name}")
         return original(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", guarded)
-    assert len(list_capabilities()) == 5
+    assert len(list_capabilities()) == 6
     assert all(c["status"] == "experimental" for c in list_capabilities())
+
+
+def test_mace_polar_request_maps_to_backend_config():
+    from matkit.api.adapters import backend_config
+    from matkit.mlip import MACEPolarConfig
+
+    request = parse_request(
+        {
+            "operation": "relax",
+            "structure": {"path": "input.xyz"},
+            "method": {"checkpoint": "polar-1-l"},
+            "adapter": {"type": "mace-polar", "charge": 1, "spin": 2},
+        }
+    )
+    assert isinstance(request.adapter, MACEPolarAdapter)
+    config = backend_config(request, ExecutionConfig(device="cuda"))
+    assert config == MACEPolarConfig(
+        checkpoint="polar-1-l", device="cuda", charge=1, spin=2
+    )
+
+
+@pytest.mark.parametrize(
+    "adapter,method",
+    [
+        ({"type": "mace-polar", "spin": 0}, {}),
+        ({"type": "mace-polar", "charge": 0.5}, {}),
+        ({"type": "mace-polar", "pbc_handling": "ewald"}, {}),
+        ({"type": "mace-polar"}, {"calculator_type": "mace_off"}),
+        ({"type": "mace-polar"}, {"dispersion": True}),
+    ],
+)
+def test_mace_polar_request_rejects_invalid_settings(adapter, method):
+    with pytest.raises(ValueError):
+        EvaluateRequest(
+            structure=StructureRef(path="input.xyz"),
+            method=MLIPMethod(checkpoint="polar-1-m", **method),
+            adapter=adapter,
+        )
+
+
+def test_mace_polar_capability_requires_graph_longrange(monkeypatch):
+    from importlib.metadata import PackageNotFoundError
+
+    from matkit.api import capabilities
+
+    def fake_version(package):
+        if package == "mace-torch":
+            return "0.3.16"
+        raise PackageNotFoundError(package)
+
+    monkeypatch.setattr(capabilities, "version", fake_version)
+    polar = next(c for c in list_capabilities() if c["adapter"] == "mace-polar")
+    assert polar["available_in_caller"] is False
+    assert polar["geometry_optimization"] is True
 
 
 def test_structure_handoff_and_invalidation(tmp_path):

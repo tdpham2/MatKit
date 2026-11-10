@@ -13,6 +13,7 @@ _DTYPES = {"float32", "float64"}
 _OPTIMIZERS = {"bfgs", "lbfgs", "gpmin", "fire", "mdmin"}
 _DRIVERS = {"energy", "opt", "md"}
 _ENSEMBLES = {"nve", "nvt"}
+_PBC_HANDLING = {"auto", "pbc", "realspace", "slab"}
 
 
 def _positive_number(name: str, value: Any) -> None:
@@ -56,6 +57,7 @@ def _validate_explicit_options(
             "md_steps",
             "friction",
         },
+        "mace-polar": {"charge", "spin", "pbc_handling"},
     }
     for owner, names in backend_options.items():
         for name in sorted(provided & names):
@@ -176,8 +178,40 @@ class NVAlchemiMACEConfig:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class MACEPolarConfig:
+    """Run a MACE-Polar electrostatics model directly through ASE.
+
+    ``charge`` and ``spin`` (multiplicity) are applied to every structure.
+    """
+
+    checkpoint: str = "polar-1-m"
+    device: str = "cpu"
+    dtype: Literal["float32", "float64"] = "float64"
+    pbc_handling: Literal["auto", "pbc", "realspace", "slab"] = "auto"
+    charge: int = 0
+    spin: int = 1
+    type: Literal["mace-polar"] = field(default="mace-polar", init=False)
+
+    def __post_init__(self) -> None:
+        if not self.checkpoint:
+            raise ValueError("checkpoint must not be empty")
+        if self.dtype not in _DTYPES:
+            raise ValueError(f"Unsupported dtype: {self.dtype}")
+        if self.pbc_handling not in _PBC_HANDLING:
+            raise ValueError(f"Unsupported pbc_handling: {self.pbc_handling}")
+        if isinstance(self.charge, bool) or not isinstance(
+            self.charge, Integral
+        ):
+            raise ValueError("charge must be an integer")
+        _positive_integer("spin", self.spin)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
 MLIPBackendConfig: TypeAlias = (
-    ASEMACEConfig | RootstockConfig | NVAlchemiMACEConfig
+    ASEMACEConfig | RootstockConfig | NVAlchemiMACEConfig | MACEPolarConfig
 )
 
 

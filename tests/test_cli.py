@@ -129,6 +129,56 @@ class TestCLI:
         assert received["backend"].setup_kwargs == {"default_dtype": "float32"}
         assert received["output"] == str(output)
 
+    def test_mlip_run_builds_mace_polar_config(self, sample_cif, monkeypatch):
+        import matkit.mlip
+
+        received = {}
+
+        def fake_run(input_file, backend, calculation, output_file):
+            received["backend"] = backend
+            return {
+                "success": True,
+                "energy": -1.0,
+                "energy_unit": "eV",
+                "converged": True,
+            }
+
+        monkeypatch.setattr(matkit.mlip, "run_mlip", fake_run)
+        result = CliRunner().invoke(
+            main,
+            [
+                "mlip",
+                "run",
+                "--input",
+                sample_cif,
+                "--backend",
+                "mace-polar",
+                "--checkpoint",
+                "polar-1-s",
+                "--charge",
+                "-1",
+                "--spin",
+                "2",
+                "--pbc-handling",
+                "realspace",
+                "--dtype",
+                "float32",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        backend = received["backend"]
+        assert isinstance(backend, matkit.mlip.MACEPolarConfig)
+        assert backend.to_dict() == {
+            "checkpoint": "polar-1-s",
+            "device": "cpu",
+            "dtype": "float32",
+            "pbc_handling": "realspace",
+            "charge": -1,
+            "spin": 2,
+            "type": "mace-polar",
+        }
+
     def test_mlip_batch_requires_one_input_source(self):
         runner = CliRunner()
         result = runner.invoke(
@@ -153,6 +203,11 @@ class TestCLI:
         ("ase-mace", ["--cluster", "polaris"], "requires --backend rootstock"),
         ("ase-mace", ["--enable-cueq"], "requires --backend nvalchemi-mace"),
         ("nvalchemi-mace", ["--dispersion"], "requires --backend ase-mace"),
+        ("ase-mace", ["--charge", "1"], "requires --backend mace-polar"),
+        ("mace-polar", ["--dispersion"], "requires --backend ase-mace"),
+        ("mace-polar", ["--cluster", "polaris"], "--backend rootstock"),
+        ("mace-polar", ["--driver", "md"], "nvalchemi-mace"),
+        ("mace-polar", ["--spin", "0"], "spin"),
         (
             "ase-mace",
             ["--calculator-type", "mace_anicc", "--dtype", "float64"],

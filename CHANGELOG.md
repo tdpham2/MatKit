@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and opt-in execution evidence recorder
 - MLIP numerical validation, strict CLI outcomes, incremental atomic batch
   persistence, and an explicit experimental GPU validation recipe
+- `mace-polar` MLIP backend for MACE-Polar electrostatics foundation models
+  (`polar-1-s/m/l`) across the Python API, CLI and unified API, with uniform
+  total charge and spin multiplicity, and a `mace_polar` install extra
 - Separate PR hardening and future development handoff plans in `docs/plans`
 - Runtime-selectable, agent-free MLIP APIs and CLI commands for direct ASE
   MACE, Rootstock, and NVIDIA ALCHEMI MACE calculations

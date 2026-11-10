@@ -10,6 +10,7 @@ from pathlib import Path
 
 from matkit.mlip import (
     ASEMACEConfig,
+    MACEPolarConfig,
     MLIPCalculationConfig,
     NVAlchemiMACEConfig,
     RootstockConfig,
@@ -21,7 +22,8 @@ from matkit.mlip.config import _validate_explicit_options
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Run direct ASE MACE, Rootstock, or NVIDIA ALCHEMI MACE on a GPU. "
+            "Run direct ASE MACE, MACE-Polar, Rootstock, or NVIDIA ALCHEMI "
+            "MACE on a GPU. "
             "Use one backend per process to keep GPU runtime state isolated."
         )
     )
@@ -33,14 +35,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--backend",
-        choices=("ase-mace", "rootstock", "nvalchemi-mace"),
+        choices=("ase-mace", "mace-polar", "rootstock", "nvalchemi-mace"),
         required=True,
     )
     parser.add_argument(
         "--checkpoint",
         help=(
             "Model alias or checkpoint path. Defaults to 'medium' for MACE and "
-            "ALCHEMI, or 'mace-mp-0-medium' for Rootstock."
+            "ALCHEMI, 'polar-1-m' for MACE-Polar, or 'mace-mp-0-medium' for "
+            "Rootstock."
         ),
     )
     parser.add_argument(
@@ -59,6 +62,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--batch-size",
         type=int,
         help="Native batch size for ALCHEMI only (default: 16).",
+    )
+    parser.add_argument(
+        "--charge", type=int, help="MACE-Polar total charge (default: 0)."
+    )
+    parser.add_argument(
+        "--spin",
+        type=int,
+        help="MACE-Polar spin multiplicity (default: 1).",
     )
     parser.add_argument(
         "--cluster",
@@ -115,6 +126,14 @@ def main() -> int:
             checkpoint=args.checkpoint or "medium",
             device="cuda",
             dtype="float32",
+        )
+    elif args.backend == "mace-polar":
+        backend = MACEPolarConfig(
+            checkpoint=args.checkpoint or "polar-1-m",
+            device="cuda",
+            dtype="float32",
+            charge=args.charge if args.charge is not None else 0,
+            spin=args.spin if args.spin is not None else 1,
         )
     elif args.backend == "rootstock":
         backend = RootstockConfig(
