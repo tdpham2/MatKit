@@ -41,9 +41,10 @@ The repository's small uncharged test CIF is not a scientific reference or a
 gRASPA input.
 
 For unified ALCHEMI, supply geometry-only extended XYZ with the correct cell
-and PBC. The current implementation rejects atom arrays, constraints, and
-bonds; even an ordinary CIF can carry ASE's `spacegroup_kinds` array and be
-rejected.
+and PBC, or a CIF and geometry-only sidecar from MatKit's snapshot exporter.
+The current implementation rejects atom arrays, constraints, and bonds; an
+ordinary CIF without that sidecar can carry ASE's `spacegroup_kinds` array
+and be rejected.
 The examples do not silently remove scientific metadata to bypass validation.
 
 Use a fresh output directory for every invocation. Subprocess execution keeps
@@ -52,6 +53,44 @@ engine output in bundle logs. The programs exit 0 for accepted calculations
 unconverged relaxation, and 2 for argument parsing or request/profile
 validation errors.
 Use `--help` on any program to see its options.
+
+## gRASPA snapshot to MLIP handoff
+
+```bash
+matkit adsorption export-snapshots runs/adsorption --outdir exports/movies --frames all
+```
+
+The default selection is the exact final production snapshot. Use
+`--frames 0,99999` for explicit saved indices, or add `--check` for validation
+without writing. The full simulation supercell is retained. TIP4P virtual
+sites are removed; charges and rigid constraints remain archived in the run.
+Keep each exported CIF and its `.metadata.json` sidecar together.
+
+```python
+from matkit.api import (
+    MLIPMethod, RelaxRequest, export_adsorption_snapshots, relax,
+)
+
+exported = export_adsorption_snapshots(
+    "runs/adsorption", output_dir="exports/final",
+)
+if not exported.accepted:
+    raise RuntimeError([frame.error for frame in exported.items])
+
+# Requires a compatible MACE model/environment for the exported species.
+result = relax(
+    RelaxRequest(
+        structure=exported.items[0].structure,
+        method=MLIPMethod(checkpoint="medium"),
+        fmax=0.05,
+    ),
+    output_dir="runs/relaxed-snapshot",
+)
+```
+
+This exports geometries, not an equilibrated training dataset. A zero-water
+snapshot is explicitly reported as dry. See the main README for supported
+formats, atom mapping, partial exports, and failure handling.
 
 ## Zeo++: pore geometry and screening
 

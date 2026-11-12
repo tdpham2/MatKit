@@ -19,11 +19,81 @@
 - Automatic unit cell replication calculation for periodic boundary conditions
 - Force field management and RASPA2-to-RASPA3 format conversion
 - Simulation output parsing with unit conversion (mol/kg, mg/g, g/L)
+- Validated gRASPA movie-to-CIF export for subsequent MLIP calculations
 - Pore geometry analysis via Zeo++ (Di/Df/Dif, surface area, volume, PSD, channels)
 - Solvent/ion removal from MOF structures using graph-based connectivity
 - SMILES to CIF linker generation for ToBaCCo MOF construction
 - CLI interface for all major operations
 - Random CIF sampling for high-throughput screening
+
+## Export gRASPA movies for MLIP calculations
+
+Export geometry from a completed MatKit adsorption bundle without launching
+gRASPA or loading an MLIP model:
+
+```bash
+matkit adsorption export-snapshots runs/adsorption --outdir exports/final
+matkit adsorption export-snapshots runs/adsorption --outdir exports/all --frames all
+matkit adsorption export-snapshots runs/adsorption --outdir exports/selected --frames 0,99999
+matkit adsorption export-snapshots runs/adsorption --outdir exports/check --check
+```
+
+The default `--frames final` requires the exact zero-based final production
+index (`production_cycles - 1`); it never substitutes an earlier frame.
+`all` selects saved `Movies/System_0/result_<cycle>.data` files numerically.
+To save more frames in future runs, set `MoviesEvery` in the template before
+preparing the calculation. Unsaved frames cannot be reconstructed.
+
+Each export contains `System_0/snapshot_<cycle>.cif`, a matching geometry-only
+`.metadata.json` sidecar, and `export_manifest.json`. Keep the sidecar with
+the CIF when using MatKit: it preserves source atom identity and prevents
+ASE-generated CIF bookkeeping arrays from reaching native ALCHEMI. Detailed
+source charges, molecule IDs, component labels, removed virtual sites, hashes,
+and validation outcomes are stored only in the export manifest. The CIF
+itself is a standalone P1 periodic structure with unit occupancies.
+
+```python
+from matkit.api import export_adsorption_snapshots
+
+result = export_adsorption_snapshots(
+    "runs/adsorption", output_dir="exports/structures", frames="all",
+)
+if not result.accepted:
+    for frame in result.items:
+        if frame.error:
+            print(frame.cycle, frame.error)
+structures = [frame.structure for frame in result.items if frame.structure]
+# Pass a StructureRef from `structures` into an EvaluateRequest or RelaxRequest.
+```
+
+The converter retains the full GCMC supercell and all physical framework and
+adsorbate atoms, validates the rigid framework against the staged CIF, checks
+rigid molecule definitions, and checks TIP4P water geometry. It removes known
+virtual sites (`Lw`, `N_com`, `H_com`) whether or not the movie writer printed
+them. Force-field charges and rigid constraints are not assigned to MLIP
+geometries. Dry snapshots are valid and labeled `exported_dry`.
+
+For custom pseudo-atoms, use `type_map={"custom_O": "O"}` in Python or
+`--type-map types.json` with a JSON object. Values are element symbols; `null`
+explicitly identifies a massless virtual site. Species come from pseudo-atom
+definitions/names; masses only check consistency. `print=no` alone does not
+make a site virtual. United-atom/coarse-grained models such as `CH4_sp3`,
+flexible molecule-definition layouts, restarted sequences, and multi-system
+bundle export are unsupported. No missing hydrogens are synthesized.
+
+For a standalone full-style data file, including a mixture, use
+`matkit.graspa.read_movie_snapshot(path, pseudo_atoms="pseudo_atoms.def")`.
+It returns a `MovieSnapshot` with geometry-only ASE `atoms`, source `sites`,
+and `removed_sites`. This lower-level reader checks file/species integrity
+and TIP4P geometry; it does not certify engine completion or automatically
+validate a reference framework or other molecular definitions.
+
+Use a fresh destination outside the source bundle. Successful frames survive
+other requested frames failing; the CLI prints a JSON report and exits 1 for
+partial/failed exports, or 2 for invalid arguments. `--check` writes nothing
+and includes an in-memory CIF round trip. A completed engine with failed
+statistics collection can still yield valid geometry; its failure is retained
+in provenance. Export does not establish equilibration or independent samples.
 
 ## Installation
 

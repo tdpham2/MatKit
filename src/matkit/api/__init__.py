@@ -2,6 +2,11 @@
 
 from .bundles import inspect_run, prepare
 from .capabilities import list_capabilities
+from .snapshots import (
+    SnapshotExportResult,
+    SnapshotFrameResult,
+    export_adsorption_snapshots,
+)
 from .models import (
     AdsorptionRequest,
     AlchemiAdapter,
@@ -33,6 +38,9 @@ from .runtime import (
 )
 
 __all__ = [
+    "SnapshotExportResult",
+    "SnapshotFrameResult",
+    "export_adsorption_snapshots",
     "AdsorptionRequest",
     "AlchemiAdapter",
     "Artifact",
