@@ -1,5 +1,6 @@
 from matkit.mlip.config import (
     ASEMACEConfig,
+    MACEPolarConfig,
     MLIPBackendConfig,
     MLIPCalculationConfig,
     NVAlchemiMACEConfig,
@@ -10,6 +11,7 @@ from matkit.types import MLIPBatchSummary, MLIPResult
 
 __all__ = [
     "ASEMACEConfig",
+    "MACEPolarConfig",
     "MLIPBackendConfig",
     "MLIPBatchSummary",
     "MLIPCalculationConfig",

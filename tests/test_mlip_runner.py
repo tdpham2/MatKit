@@ -13,6 +13,7 @@ from ase.io import write
 
 from matkit.mlip import (
     ASEMACEConfig,
+    MACEPolarConfig,
     MLIPCalculationConfig,
     NVAlchemiMACEConfig,
     RootstockConfig,
@@ -84,6 +85,92 @@ def test_mace_anicc_uses_model_path_signature(monkeypatch):
 
     assert calculator == "calculator"
     assert received == {"device": "cuda", "model_path": "ani.model"}
+
+
+def _fake_mace_calculators(monkeypatch, **factories):
+    calculators = SimpleNamespace(**factories)
+    monkeypatch.setitem(sys.modules, "mace.calculators", calculators)
+    monkeypatch.setitem(
+        sys.modules, "mace", SimpleNamespace(calculators=calculators)
+    )
+
+
+def test_mace_polar_forwards_factory_options(monkeypatch):
+    received = {}
+
+    def mace_polar(**kwargs):
+        received.update(kwargs)
+        return "calculator"
+
+    _fake_mace_calculators(monkeypatch, mace_polar=mace_polar)
+
+    calculator = mlip_runner._create_mace_polar_calculator(
+        MACEPolarConfig(
+            checkpoint="polar-1-s",
+            device="cuda",
+            dtype="float32",
+            pbc_handling="realspace",
+        )
+    )
+
+    assert calculator == "calculator"
+    assert received == {
+        "model": "polar-1-s",
+        "device": "cuda",
+        "default_dtype": "float32",
+        "pbc_handling": "realspace",
+    }
+
+
+def test_mace_polar_requires_recent_mace_torch(monkeypatch):
+    _fake_mace_calculators(monkeypatch)
+
+    with pytest.raises(ImportError, match="mace-torch>=0.3.16"):
+        mlip_runner._create_mace_polar_calculator(MACEPolarConfig())
+
+
+def test_mace_polar_applies_charge_and_spin(tmp_path, monkeypatch):
+    input_file = tmp_path / "copper.xyz"
+    atoms = Atoms("Cu2", positions=[[0.0, 0.0, 0.0], [2.5, 0.0, 0.0]])
+    atoms.info["charge"] = 5
+    write(input_file, atoms)
+    seen = []
+
+    class RecordingEMT(EMT):
+        def calculate(self, atoms=None, *args, **kwargs):
+            seen.append((atoms.info["charge"], atoms.info["spin"]))
+            super().calculate(atoms, *args, **kwargs)
+
+    @contextmanager
+    def calculator_context(config):
+        assert isinstance(config, MACEPolarConfig)
+        yield RecordingEMT()
+
+    monkeypatch.setattr(mlip_runner, "_ase_backend_context", calculator_context)
+
+    result = run_mlip(
+        input_file,
+        MACEPolarConfig(charge=-1, spin=2),
+        MLIPCalculationConfig(driver="opt", steps=2),
+    )
+
+    assert result["success"] is True
+    assert seen and set(seen) == {(-1, 2)}
+    assert result["backend_info"]["type"] == "mace-polar"
+    assert result["backend_info"]["charge"] == -1
+    assert result["backend_info"]["spin"] == 2
+
+
+def test_mace_polar_rejects_md(tmp_path):
+    input_file = tmp_path / "copper.xyz"
+    _write_copper(input_file)
+
+    with pytest.raises(ValueError, match="nvalchemi-mace"):
+        run_mlip(
+            input_file,
+            MACEPolarConfig(),
+            MLIPCalculationConfig(driver="md"),
+        )
 
 
 def test_run_mlip_energy_writes_runtime_neutral_result(tmp_path, monkeypatch):

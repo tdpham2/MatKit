@@ -120,6 +120,11 @@ pip install -e ".[rootstock]"
 # NVIDIA ALCHEMI MACE support (install a matching CUDA extra too)
 pip install -e ".[nvalchemi_mace]"
 
+# MACE-Polar electrostatics models (mace-torch>=0.3.16 + graph_longrange).
+# Conflicts with nvalchemi_mace, which pins mace-torch 0.3.15; use a
+# separate environment.
+pip install -e ".[mace_polar]"
+
 # All optional dependencies
 pip install -e ".[all]"
 
@@ -160,6 +165,10 @@ matkit mlip run --input structure.cif --backend ase-mace \
 matkit mlip run --input structure.cif --backend rootstock \
   --checkpoint mace-mp-0-medium --cluster polaris --device cuda
 
+# Run MACE-Polar on a charged molecule (charge/spin apply to every input)
+matkit mlip run --input molecule.xyz --backend mace-polar \
+  --checkpoint polar-1-m --charge -1 --spin 2 --device cuda
+
 # Run a native NVIDIA ALCHEMI batch
 matkit mlip run-batch --input-dir cifs --backend nvalchemi-mace \
   --checkpoint medium --device cuda --batch-size 16
@@ -169,7 +178,7 @@ matkit mlip run-batch --input-dir cifs --backend nvalchemi-mace \
 
 The [calculation examples guide](examples/README.md) covers Zeo++ pore analysis
 and screening, pure-component gRASPA execution and pressure sweeps, mixture
-preparation, and MLIP evaluation/relaxation/batches across all three current
+preparation, and MLIP evaluation/relaxation/batches across all four current
 backends. It includes runnable Python programs, equivalent CLI specifications,
 and result inspection using public MatKit interfaces.
 
@@ -183,6 +192,10 @@ structure files and writes a manifest plus one JSON result per input.
 # Direct MACE calculator through ASE
 python examples/mlip_gpu.py --backend ase-mace structure.cif
 
+# MACE-Polar foundation model (polar-1-s/m/l)
+python examples/mlip_gpu.py --backend mace-polar \
+  --checkpoint polar-1-m --charge 0 --spin 1 molecule.xyz
+
 # Rootstock-managed MACE checkpoint on Polaris
 python examples/mlip_gpu.py --backend rootstock \
   --cluster polaris --checkpoint mace-mp-0-medium structure.cif
@@ -192,7 +205,7 @@ python examples/mlip_gpu.py --backend nvalchemi-mace \
   --checkpoint medium --batch-size 16 structures/*.cif
 ```
 
-All three commands force `device="cuda"` and use `float32` where the backend
+All four commands force `device="cuda"` and use `float32` where the backend
 exposes a dtype. Pass `--driver opt` for a fixed-cell geometry optimization.
 
 The new MLIP adapters remain **experimental** until a real execution is

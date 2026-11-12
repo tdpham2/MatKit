@@ -181,6 +181,7 @@ def environment_versions() -> dict:
         "numpy",
         "pydantic",
         "mace-torch",
+        "graph_longrange",
         "rootstock",
         "nvalchemi-toolkit",
         "torch",

@@ -12,6 +12,15 @@ _CAPABILITIES = {
         "CPU/CUDA; MACE-supported Python and dependencies",
         "Species, periodicity and supported properties depend on the model",
     ),
+    "mace-polar": (
+        "mace-torch",
+        ["evaluate", "relax"],
+        ["potential_energy", "forces", "stress (periodic structures)"],
+        "CPU/CUDA; mace-torch>=0.3.16 and graph_longrange "
+        "(graph_electrostatics)",
+        "Trained on molecular OMol25 data; one charge/spin per request; "
+        "dipoles and charges are not exported",
+    ),
     "rootstock": (
         "rootstock",
         ["evaluate", "relax"],
@@ -43,6 +52,15 @@ _CAPABILITIES = {
         "Single component; atom-mapped CIF charges; sampling quality unknown",
     ),
 }
+# Further distributions an adapter needs; checked by metadata, not import.
+_REQUIRES = {"mace-polar": ("graph_longrange",)}
+
+
+def _installed(package: str) -> str | None:
+    try:
+        return version(package)
+    except PackageNotFoundError:
+        return None
 
 
 def list_capabilities() -> list[dict]:
@@ -56,11 +74,10 @@ def list_capabilities() -> list[dict]:
     ) in _CAPABILITIES.items():
         installed_version = None
         if package:
-            try:
-                installed_version = version(package)
-            except PackageNotFoundError:
-                pass
-            available = installed_version is not None
+            installed_version = _installed(package)
+            available = installed_version is not None and all(
+                _installed(name) for name in _REQUIRES.get(adapter, ())
+            )
         else:
             available = (
                 shutil.which("network" if adapter == "zeopp" else "simulate")
@@ -77,7 +94,7 @@ def list_capabilities() -> list[dict]:
                 "status": "experimental",
                 "evidence": "CPU fixtures; real-execution evidence not bundled",
                 "geometry_optimization": adapter
-                in {"ase-mace", "rootstock", "nvalchemi-mace"},
+                in {"ase-mace", "mace-polar", "rootstock", "nvalchemi-mace"},
                 "cell_optimization": False,
                 "restart": False,
                 "native_batch": adapter == "nvalchemi-mace",

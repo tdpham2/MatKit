@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluate or relax structures with MACE, Rootstock, or ALCHEMI."""
+"""Evaluate or relax structures with MACE, MACE-Polar, Rootstock, or ALCHEMI."""
 
 import argparse
 from pathlib import Path
@@ -10,6 +10,7 @@ from matkit.api import (
     EvaluateRequest,
     ExecutionConfig,
     MACEAdapter,
+    MACEPolarAdapter,
     MLIPMethod,
     RelaxRequest,
     RootstockAdapter,
@@ -32,7 +33,7 @@ def main(argv=None):
     parser.add_argument(
         "--backend",
         required=True,
-        choices=("ase-mace", "rootstock", "nvalchemi-mace"),
+        choices=("ase-mace", "mace-polar", "rootstock", "nvalchemi-mace"),
     )
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument(
@@ -44,6 +45,10 @@ def main(argv=None):
     location.add_argument("--root", help="Rootstock deployment directory.")
     parser.add_argument(
         "--batch-size", type=int, help="ALCHEMI native chunk size."
+    )
+    parser.add_argument("--charge", type=int, help="MACE-Polar total charge.")
+    parser.add_argument(
+        "--spin", type=int, help="MACE-Polar spin multiplicity."
     )
     parser.add_argument(
         "--fmax", type=float, help="Relaxation force tolerance (eV/A)."
@@ -61,6 +66,10 @@ def main(argv=None):
         parser.error("Rootstock precision is configured in its deployment")
     if args.backend != "nvalchemi-mace" and args.batch_size is not None:
         parser.error("--batch-size requires --backend nvalchemi-mace")
+    if args.backend != "mace-polar" and (
+        args.charge is not None or args.spin is not None
+    ):
+        parser.error("--charge and --spin require --backend mace-polar")
     if args.driver == "energy" and (
         args.fmax is not None or args.steps is not None
     ):
@@ -76,6 +85,12 @@ def main(argv=None):
         ).model_copy(update={"mode": "subprocess"})
         if args.backend == "ase-mace":
             adapter = MACEAdapter(dtype=args.dtype)
+        elif args.backend == "mace-polar":
+            adapter = MACEPolarAdapter(
+                dtype=args.dtype,
+                charge=args.charge if args.charge is not None else 0,
+                spin=args.spin if args.spin is not None else 1,
+            )
         elif args.backend == "rootstock":
             adapter = RootstockAdapter(cluster=args.cluster, root=args.root)
         else:
